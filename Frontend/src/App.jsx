@@ -5,7 +5,7 @@ import io from 'socket.io-client';
 // URL dinámica para producción/local
 const BACKEND_URL = window.location.hostname.includes('localhost') 
   ? 'http://localhost:4000' 
-  : '[https://mi-poker-app.onrender.com](https://mi-poker-app.onrender.com)'; // CAMBIA ESTO CUANDO TENGAS LA URL DE RENDER
+  : 'https://mi-poker-app.onrender.com';
 
 const socket = io(BACKEND_URL);
 
