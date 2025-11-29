@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: mi-poker-app-backend
+    env: node
+    rootDir: Backend
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+  - type: web
+    name: mi-poker-app-frontend
+    env: static
+    rootDir: Frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: dist

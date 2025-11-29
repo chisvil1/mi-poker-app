@@ -1,3 +1,62 @@
+@import 'inter-ui/inter.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  @apply bg-base-100 text-gray-200 font-sans;
+}
+
+@keyframes deal-in {
+  from {
+    transform: translate(-50%, -50%) scale(0.5) rotate(180deg) perspective(500px) rotateY(180deg);
+    opacity: 0;
+  }
+  to {
+    transform: translate(0, 0) scale(1) rotate(0deg) perspective(0px) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+.deal-in-start {
+  transform: translate(-50%, -50%) scale(0.5) rotate(180deg) perspective(500px) rotateY(180deg);
+  opacity: 0;
+}
+
+.deal-in-end {
+  animation: deal-in 0.7s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes bet-in {
+  from {
+    transform: scale(0.5) translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.bet-in-start {
+  transform: scale(0.5) translateY(20px);
+  opacity: 0;
+}
+
+.bet-in-end {
+  animation: bet-in 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes winner-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px theme('colors.primary'));
+  }
+  50% {
+    filter: drop-shadow(0 0 20px theme('colors.primary'));
+  }
+}
+
+.winner-glow {
+  animation: winner-glow 2s ease-in-out infinite;
+}
