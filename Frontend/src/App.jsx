@@ -1,3 +1,12 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Settings, Volume2, VolumeX, Trophy, 
+  Menu, DollarSign, RefreshCw, ChevronRight, 
+  Users, CreditCard, LogOut, X, ShieldCheck, Filter, Play, Plus,
+  MessageSquare, Send
+} from 'lucide-react';
+import { io } from 'socket.io-client';
+
 const getBackendUrl = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
