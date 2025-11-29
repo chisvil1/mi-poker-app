@@ -142,6 +142,7 @@ const nextPhase = () => {
         gameState.message = `Ganador: ${winners[0].name}`;
         gameState.pot = 0;
         broadcastState();
+        setTimeout(() => startNewHand(), 5000); // Inicia la siguiente mano después de 5 segundos
         return;
     }
     
@@ -161,6 +162,17 @@ const handlePlayerAction = (socketId, action, amount) => {
 
     if (action === 'fold') {
         player.hasFolded = true;
+        const remainingPlayers = gameState.players.filter(p => !p.hasFolded);
+        if (remainingPlayers.length === 1) {
+            const winner = remainingPlayers[0];
+            winner.chips += gameState.pot;
+            gameState.pot = 0;
+            gameState.phase = 'showdown'; // Usa la fase showdown para mostrar al ganador
+            gameState.message = `Ganador: ${winner.name}`;
+            broadcastState();
+            setTimeout(() => startNewHand(), 5000);
+            return; // Termina la ejecución de la acción aquí
+        }
     } else if (action === 'call') {
         const toCall = gameState.currentBet - player.currentBet;
         const actualBet = Math.min(toCall, player.chips);
