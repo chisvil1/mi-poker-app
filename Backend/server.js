@@ -106,6 +106,11 @@ const startNewHand = () => {
     gameState.activePlayerIndex = (bbIndex + 1) % gameState.players.length;
     
     broadcastState();
+
+    // Si el primer jugador en actuar es un bot, inicia su turno.
+    if (gameState.activePlayerIndex !== -1 && !gameState.players[gameState.activePlayerIndex].isHuman) {
+      setTimeout(() => botPlay(gameState.activePlayerIndex), 1000);
+    }
 };
 
 const nextPhase = () => {
