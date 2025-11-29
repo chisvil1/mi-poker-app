@@ -189,10 +189,7 @@ const handlePlayerAction = (socketId, action, amount) => {
             gameState.currentBet = totalBet;
         }
     } else if (action === 'check') {
-        // Nada
-    }
-
-    // --- LÓGICA DE FIN DE MANO / FIN DE RONDA ---
+        // --- LÓGICA DE FIN DE MANO / FIN DE RONDA ---
 
     // Condición de victoria inmediata: ¿Solo queda un jugador?
     const remainingPlayers = gameState.players.filter(p => !p.hasFolded);
@@ -207,25 +204,28 @@ const handlePlayerAction = (socketId, action, amount) => {
         return; // Fin de la acción
     }
 
-    // Avanzar turno
-    let nextIndex = (gameState.activePlayerIndex + 1) % gameState.players.length;
+    // Avanzar al siguiente jugador que puede actuar
+    let nextIndex = (playerIndex + 1) % gameState.players.length;
     let loopSafety = 0;
-    
-    // Buscar siguiente jugador activo que no esté all-in
     while ((gameState.players[nextIndex].hasFolded || gameState.players[nextIndex].isAllIn) && loopSafety < 10) {
         nextIndex = (nextIndex + 1) % gameState.players.length;
         loopSafety++;
     }
 
-    // Condición de fin de ronda de apuestas: ¿Todos han igualado la apuesta?
+    // Condición de fin de ronda: ¿Todos los que quedan han apostado lo mismo?
     const playersInHand = gameState.players.filter(p => !p.hasFolded);
-    const allMatched = playersInHand.every(p => p.currentBet === gameState.currentBet || p.isAllIn || p.hasFolded);
-    const firstActorIndex = (gameState.dealerIndex + 1) % gameState.players.length; // Post-flop, el primero en hablar es SB
+    const allMatched = playersInHand.every(p => p.currentBet === gameState.currentBet || p.isAllIn);
     
-    // Si la apuesta ha dado la vuelta completa y todos han igualado
-    if (allMatched && (nextIndex === firstActorIndex || playersInHand.length < 2)) {
+    // Excepción: La ciega grande pre-flop tiene la opción de subir.
+    const isPreflop = gameState.phase === 'preflop';
+    const bbIndex = (gameState.dealerIndex + 2) % gameState.players.length;
+    const isBBOnOption = isPreflop && playerIndex === bbIndex && gameState.currentBet === BIG_BLIND;
+
+    if (allMatched && !isBBOnOption) {
+        // La ronda de apuestas terminó, vamos a la siguiente fase (flop, turn, etc.)
         nextPhase();
     } else {
+        // La ronda continúa
         gameState.activePlayerIndex = nextIndex;
         
         // IA BÁSICA: Si el siguiente es un BOT, actúa automáticamente
