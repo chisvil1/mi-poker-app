@@ -92,8 +92,16 @@ const SEAT_POSITIONS = [
 
 // --- COMPONENTES VISUALES ---
 
+const SUIT_MAP = {
+  'S': '♠️',
+  'H': '♥️',
+  'C': '♣️',
+  'D': '♦️',
+};
+
 const Card = ({ rank, suit, isFaceDown = false, size = 'normal', className = "" }) => {
-  const isRed = suit === '♥️' || suit === '♦️';
+  const isRed = suit === 'H' || suit === 'D';
+  const suitIcon = SUIT_MAP[suit] || suit; // Convert suit letter to emoji
   const cardBackUrl = "https://placehold.co/64x96/4A0000/FFFFFF?text=BACK";
   
   const sizeClasses = {
@@ -122,7 +130,7 @@ const Card = ({ rank, suit, isFaceDown = false, size = 'normal', className = "" 
   return (
     <div className={`${currentSizeClass} bg-white rounded-md shadow-xl border border-gray-300 flex flex-col items-center justify-between p-1 select-none transition-transform duration-300 hover:-translate-y-2 ${className}`}>
       <div className={`text-xs md:text-sm font-bold self-start ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
-      <div className={`text-lg md:text-2xl ${isRed ? 'text-red-600' : 'text-black'}`}>{suit}</div>
+      <div className={`text-lg md:text-2xl ${isRed ? 'text-red-600' : 'text-black'}`}>{suitIcon}</div>
     </div>
   );
 };
