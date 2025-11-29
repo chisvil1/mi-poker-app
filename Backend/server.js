@@ -86,40 +86,31 @@ const broadcastState = (tableId) => {
   const table = tables.get(tableId);
   if (!table) return;
 
-  const publicPlayers = table.players.map(p => {
-    if (!p) return null;
-    const showCards = table.phase === 'showdown' && !p.hasFolded;
-    
-    // Formato para el frontend
-    const formatCard = (c) => c ? { 
-        rank: c.slice(0, -1).replace('T', '10'), 
-        suit: c.slice(-1).toUpperCase() 
-    } : null;
-
-    return {
-        ...p,
-        // Enviar cartas solo si es el usuario dueño del socket o si es showdown
-        // (Aquí simplificamos enviando 'xx' si está oculto para la vista pública general)
-        hand: p.hand.map(c => showCards ? formatCard(c) : 'xx'),
-        showCards
-    };
-  });
-  
   // Enviar estado específico a cada jugador para que vean sus propias cartas
   table.players.forEach(p => {
       if (p && p.isHuman) {
-          const playerSpecificPlayers = publicPlayers.map(pp => {
-              if (pp && pp.socketId === p.socketId) {
+          const playerSpecificPlayers = table.players.map(pp => {
+              if(!pp) return null;
+              const showCards = table.phase === 'showdown' && !pp.hasFolded;
+              const formatCard = (c) => c ? { 
+                  rank: c.slice(0, -1).replace('T', '10'), 
+                  suit: c.slice(-1).toUpperCase() 
+              } : null;
+
+              if (pp.socketId === p.socketId) {
                   // Revelar mis propias cartas
+                   console.log(`Player ${p.name} hand:`, p.hand);
                    return {
                        ...pp,
-                       hand: p.hand.map(c => ({ 
-                            rank: c.slice(0, -1).replace('T', '10'), 
-                            suit: c.slice(-1).toUpperCase() 
-                       }))
+                       hand: p.hand.map(formatCard)
                    };
               }
-              return pp;
+              // Ocultar cartas de otros
+              return {
+                 ...pp,
+                 hand: pp.hand.map(c => showCards ? formatCard(c) : null),
+                 showCards
+              };
           });
           
           const communityPublic = table.communityCards.map(c => ({
@@ -127,6 +118,7 @@ const broadcastState = (tableId) => {
             suit: c.slice(-1).toUpperCase()
           }));
 
+          console.log(`Sending update to ${p.name}`, playerSpecificPlayers.find(pl => pl && pl.socketId === p.socketId).hand.length);
           io.to(p.socketId).emit('game_update', { 
               ...table, 
               players: playerSpecificPlayers,
