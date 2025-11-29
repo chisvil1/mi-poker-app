@@ -192,22 +192,38 @@ const handlePlayerAction = (socketId, action, amount) => {
         // Nada
     }
 
+    // --- LÓGICA DE FIN DE MANO / FIN DE RONDA ---
+
+    // Condición de victoria inmediata: ¿Solo queda un jugador?
+    const remainingPlayers = gameState.players.filter(p => !p.hasFolded);
+    if (remainingPlayers.length === 1) {
+        const winner = remainingPlayers[0];
+        winner.chips += gameState.pot;
+        gameState.pot = 0;
+        gameState.phase = 'showdown'; // Reutilizamos 'showdown' para mostrar el resultado
+        gameState.message = `Ganador: ${winner.name}`;
+        broadcastState();
+        setTimeout(() => startNewHand(), 5000); // Inicia la siguiente mano
+        return; // Fin de la acción
+    }
+
     // Avanzar turno
     let nextIndex = (gameState.activePlayerIndex + 1) % gameState.players.length;
     let loopSafety = 0;
     
-    // Buscar siguiente jugador activo
+    // Buscar siguiente jugador activo que no esté all-in
     while ((gameState.players[nextIndex].hasFolded || gameState.players[nextIndex].isAllIn) && loopSafety < 10) {
         nextIndex = (nextIndex + 1) % gameState.players.length;
         loopSafety++;
     }
 
-    // Lógica simplificada de fin de ronda (si todos igualaron)
-    const activePlayers = gameState.players.filter(p => !p.hasFolded && !p.isAllIn);
-    const allMatched = activePlayers.every(p => p.currentBet === gameState.currentBet);
+    // Condición de fin de ronda de apuestas: ¿Todos han igualado la apuesta?
+    const playersInHand = gameState.players.filter(p => !p.hasFolded);
+    const allMatched = playersInHand.every(p => p.currentBet === gameState.currentBet || p.isAllIn || p.hasFolded);
+    const firstActorIndex = (gameState.dealerIndex + 1) % gameState.players.length; // Post-flop, el primero en hablar es SB
     
-    // Si volvimos al agresor original o todos checkearon/igualaron
-    if (allMatched && (nextIndex === (gameState.dealerIndex + 1) % gameState.players.length || activePlayers.length < 2)) {
+    // Si la apuesta ha dado la vuelta completa y todos han igualado
+    if (allMatched && (nextIndex === firstActorIndex || playersInHand.length < 2)) {
         nextPhase();
     } else {
         gameState.activePlayerIndex = nextIndex;
