@@ -160,19 +160,9 @@ const handlePlayerAction = (socketId, action, amount) => {
 
     const player = gameState.players[playerIndex];
 
+    // 1. Ejecutar la acción del jugador
     if (action === 'fold') {
         player.hasFolded = true;
-        const remainingPlayers = gameState.players.filter(p => !p.hasFolded);
-        if (remainingPlayers.length === 1) {
-            const winner = remainingPlayers[0];
-            winner.chips += gameState.pot;
-            gameState.pot = 0;
-            gameState.phase = 'showdown'; // Usa la fase showdown para mostrar al ganador
-            gameState.message = `Ganador: ${winner.name}`;
-            broadcastState();
-            setTimeout(() => startNewHand(), 5000);
-            return; // Termina la ejecución de la acción aquí
-        }
     } else if (action === 'call') {
         const toCall = gameState.currentBet - player.currentBet;
         const actualBet = Math.min(toCall, player.chips);
@@ -189,46 +179,44 @@ const handlePlayerAction = (socketId, action, amount) => {
             gameState.currentBet = totalBet;
         }
     } else if (action === 'check') {
-        // --- LÓGICA DE FIN DE MANO / FIN DE RONDA ---
+        // No se hace nada con el dinero, solo se pasa el turno.
+    }
 
-    // Condición de victoria inmediata: ¿Solo queda un jugador?
+    // 2. Lógica de fin de mano (victoria inmediata)
     const remainingPlayers = gameState.players.filter(p => !p.hasFolded);
     if (remainingPlayers.length === 1) {
         const winner = remainingPlayers[0];
         winner.chips += gameState.pot;
         gameState.pot = 0;
-        gameState.phase = 'showdown'; // Reutilizamos 'showdown' para mostrar el resultado
+        gameState.phase = 'showdown';
         gameState.message = `Ganador: ${winner.name}`;
         broadcastState();
-        setTimeout(() => startNewHand(), 5000); // Inicia la siguiente mano
-        return; // Fin de la acción
+        setTimeout(() => startNewHand(), 5000);
+        return;
     }
 
-    // Avanzar al siguiente jugador que puede actuar
-    let nextIndex = (playerIndex + 1) % gameState.players.length;
-    let loopSafety = 0;
-    while ((gameState.players[nextIndex].hasFolded || gameState.players[nextIndex].isAllIn) && loopSafety < 10) {
-        nextIndex = (nextIndex + 1) % gameState.players.length;
-        loopSafety++;
-    }
-
-    // Condición de fin de ronda: ¿Todos los que quedan han apostado lo mismo?
+    // 3. Lógica de fin de ronda de apuestas
     const playersInHand = gameState.players.filter(p => !p.hasFolded);
     const allMatched = playersInHand.every(p => p.currentBet === gameState.currentBet || p.isAllIn);
     
-    // Excepción: La ciega grande pre-flop tiene la opción de subir.
     const isPreflop = gameState.phase === 'preflop';
     const bbIndex = (gameState.dealerIndex + 2) % gameState.players.length;
+    // La opción de la ciega grande ocurre si la acción le llega y nadie ha subido aún.
     const isBBOnOption = isPreflop && playerIndex === bbIndex && gameState.currentBet === BIG_BLIND;
 
     if (allMatched && !isBBOnOption) {
-        // La ronda de apuestas terminó, vamos a la siguiente fase (flop, turn, etc.)
+        // La ronda de apuestas terminó, vamos a la siguiente fase
         nextPhase();
     } else {
-        // La ronda continúa
+        // La ronda continúa, avanza al siguiente jugador.
+        let nextIndex = (playerIndex + 1) % gameState.players.length;
+        let loopSafety = 0;
+        while ((gameState.players[nextIndex].hasFolded || gameState.players[nextIndex].isAllIn) && loopSafety < 10) {
+            nextIndex = (nextIndex + 1) % gameState.players.length;
+            loopSafety++;
+        }
         gameState.activePlayerIndex = nextIndex;
         
-        // IA BÁSICA: Si el siguiente es un BOT, actúa automáticamente
         if (!gameState.players[nextIndex].isHuman) {
             setTimeout(() => botPlay(nextIndex), 1000);
         }
