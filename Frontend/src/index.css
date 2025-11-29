@@ -10,17 +10,17 @@ body {
 
 @keyframes deal-in {
   from {
-    transform: translate(-50%, -50%) scale(0.5) rotate(180deg) perspective(500px) rotateY(180deg);
+    transform: scale(0.5) rotateY(180deg);
     opacity: 0;
   }
   to {
-    transform: translate(0, 0) scale(1) rotate(0deg) perspective(0px) rotateY(0deg);
+    transform: scale(1) rotateY(0deg);
     opacity: 1;
   }
 }
 
 .deal-in-start {
-  transform: translate(-50%, -50%) scale(0.5) rotate(180deg) perspective(500px) rotateY(180deg);
+  transform: scale(0.5) rotateY(180deg);
   opacity: 0;
 }
 

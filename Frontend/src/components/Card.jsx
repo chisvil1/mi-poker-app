@@ -49,9 +49,8 @@ const Card = ({ rank, suit, isFaceDown = false, size = 'normal', className = "",
 
   return (
     <div className={`${currentSizeClass} bg-white rounded-md shadow-xl border border-gray-300 flex flex-col items-center justify-center p-1 select-none transition-transform duration-300 hover:-translate-y-2 ${className} ${animationClass}`}>
-      <div className={`absolute top-1 left-2 text-sm md:text-base font-bold ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
-      <div className={`text-xl md:text-3xl ${isRed ? 'text-red-600' : 'text-black'}`}>{suitIcon}</div>
-      <div className={`absolute bottom-1 right-2 text-sm md:text-base font-bold transform rotate-180 ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
+      <div className={`text-lg md:text-xl font-bold ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
+      <div className={`text-2xl md:text-4xl ${isRed ? 'text-red-600' : 'text-black'}`}>{suitIcon}</div>
     </div>
   );
 };
