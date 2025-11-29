@@ -1,21 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Settings, Volume2, VolumeX, Trophy, 
-  Menu, DollarSign, RefreshCw, ChevronRight, 
-  Users, CreditCard, LogOut, X, ShieldCheck, Filter, Play, Plus,
-  MessageSquare, Send
-} from 'lucide-react';
-// FIX: Usar importación con nombre para evitar errores de 'reading default'
-import { io } from 'socket.io-client'; 
-
-// --- UTILIDADES Y CONSTANTES ---
-
 const getBackendUrl = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:4000';
   }
-  return 'https://mi-backend-poker.onrender.com'; 
+  return 'https://mi-poker-app.onrender.com'; 
 };
 
 const socket = io(getBackendUrl());
@@ -285,24 +273,31 @@ const PokerTable = ({ tableConfig, userBalance, onLeave, onUpdateBalance }) => {
   ];
 
   useEffect(() => {
-    socket.on('connect', () => {
-        setIsConnected(true);
-        socket.emit('join_game', 'Jugador Pro');
-    });
-    
-    socket.on('game_update', (data) => setGameState(data));
-    
-    socket.on('chat_message', (msg) => {
+    const onConnect = () => {
+      setIsConnected(true);
+      socket.emit('join_game', { playerName: 'Jugador Pro', tableId: tableConfig.id });
+    };
+
+    const onGameUpdate = (data) => setGameState(data);
+    const onChatMessage = (msg) => {
         setChatMessages(prev => [...prev, msg]);
         playSound('message');
-    });
+    };
+
+    socket.on('connect', onConnect);
+    socket.on('game_update', onGameUpdate);
+    socket.on('chat_message', onChatMessage);
+
+    if (socket.connected) {
+      onConnect();
+    }
 
     return () => {
-        socket.off('connect');
-        socket.off('game_update');
-        socket.off('chat_message');
+      socket.off('connect', onConnect);
+      socket.off('game_update', onGameUpdate);
+      socket.off('chat_message', onChatMessage);
     };
-  }, []);
+  }, [tableConfig.id]);
 
   const handleSendMessage = (text) => {
       socket.emit('chat_message', { player: 'Tú', text });
