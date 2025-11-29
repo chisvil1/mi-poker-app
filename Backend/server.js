@@ -86,19 +86,22 @@ const broadcastState = (tableId) => {
   const table = tables.get(tableId);
   if (!table) return;
 
+  console.log(`Broadcasting state for table ${tableId}`);
+
   // Enviar estado específico a cada jugador para que vean sus propias cartas
   table.players.forEach(p => {
       if (p && p.isHuman) {
+          console.log(`Processing player ${p.name}`);
           const playerSpecificPlayers = table.players.map(pp => {
               if(!pp) return null;
               const showCards = table.phase === 'showdown' && !pp.hasFolded;
+              
               const formatCard = (c) => c ? { 
                   rank: c.slice(0, -1).replace('T', '10'), 
                   suit: c.slice(-1).toUpperCase() 
               } : null;
 
               if (pp.socketId === p.socketId) {
-                  // Revelar mis propias cartas
                    console.log(`Player ${p.name} hand:`, p.hand);
                    return {
                        ...pp,
@@ -139,6 +142,8 @@ const startNewHand = (tableId) => {
         }
         return;
     }
+    
+    console.log(`Starting new hand for table ${tableId}`);
 
     table.deck = createDeck();
     table.pot = table.smallBlind + table.bigBlind;
@@ -149,7 +154,9 @@ const startNewHand = (tableId) => {
 
     table.players.forEach(p => {
         if(p) {
+            console.log(`Dealing cards to player ${p.name}`);
             p.hand = [table.deck.pop(), table.deck.pop()];
+            console.log(`Player ${p.name} has ${p.hand.length} cards:`, p.hand);
             p.currentBet = 0;
             p.hasFolded = false;
             p.isAllIn = false;
