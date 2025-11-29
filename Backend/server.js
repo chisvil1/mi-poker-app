@@ -226,12 +226,13 @@ const botPlay = (index) => {
 io.on('connection', (socket) => {
   console.log('Usuario conectado:', socket.id);
 
-  socket.on('join_game', (playerName) => {
+  socket.on('join_game', (joinData) => {
       // Reiniciar juego si está vacío o unir
       if (gameState.players.length === 0) {
+          const playerName = (joinData && joinData.playerName) ? joinData.playerName : 'Hero';
           // Crear jugador humano + 5 bots
           gameState.players = [
-              { id: 0, socketId: socket.id, name: playerName || 'Hero', chips: 1000, hand: [], isHuman: true, currentBet: 0 },
+              { id: 0, socketId: socket.id, name: playerName, chips: 1000, hand: [], isHuman: true, currentBet: 0 },
               ...Array.from({length: 5}, (_, i) => ({
                   id: i+1, socketId: `bot_${i}`, name: `Bot ${i+1}`, chips: 1000, hand: [], isHuman: false, currentBet: 0
               }))

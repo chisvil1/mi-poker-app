@@ -171,7 +171,7 @@ const PlayerSeat = ({ player, position, isMe, isActive }) => {
       `}>
         {player.hand && player.hand.map((card, i) => (
           <div key={i} className={`transform ${i===0?'-rotate-6':'rotate-6'} ${isWinner ? 'animate-bounce' : ''} transition-all duration-500 origin-bottom-left`}>
-             <Card rank={card.rank} suit={card.suit} isFaceDown={!isMe && !player.showCards && !isWinner} size="small" />
+             <Card rank={card?.rank} suit={card?.suit} isFaceDown={!card || (!isMe && !player.showCards && !isWinner)} size="small" />
           </div>
         ))}
       </div>
