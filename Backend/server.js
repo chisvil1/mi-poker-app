@@ -39,7 +39,7 @@ const BIG_BLIND = 20;
 
 // --- UTILIDADES DE PÓKER ---
 const createDeck = () => {
-  const suits = [♠️', '♥️', '♣️', '♦️'];
+  const suits = ['S', 'H', 'C', 'D'];
   const ranks = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
   let d = [];
   for(let s of suits) for(let r of ranks) d.push({suit: s, rank: r});

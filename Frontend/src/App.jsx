@@ -12,14 +12,22 @@ const socket = io(BACKEND_URL);
 // --- COMPONENTES VISUALES (Card, ChipStack, etc.) ---
 // (He simplificado esta parte para no repetir código, usa los mismos componentes visuales que ya tenías)
 
+const SUIT_MAP = {
+  'S': '♠️',
+  'H': '♥️',
+  'C': '♣️',
+  'D': '♦️',
+};
+
 const Card = ({ rank, suit, isFaceDown = false, size = 'normal' }) => {
-  const isRed = suit === '♥️' || suit === '♦️';
+  const isRed = suit === 'H' || suit === 'D';
+  const suitIcon = SUIT_MAP[suit] || suit;
   const sizeClasses = { normal: 'w-10 h-14 md:w-14 md:h-20', small: 'w-8 h-12 md:w-10 md:h-14 text-xs' };
   if (isFaceDown) return <div className={`bg-red-900 rounded border border-white/20 ${sizeClasses[size] || sizeClasses.normal}`}></div>;
   return (
     <div className={`bg-white rounded text-center border border-gray-300 flex flex-col justify-center ${sizeClasses[size] || sizeClasses.normal}`}>
       <div className={`font-bold ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
-      <div className={`text-lg ${isRed ? 'text-red-600' : 'text-black'}`}>{suit}</div>
+      <div className={`text-lg ${isRed ? 'text-red-600' : 'text-black'}`}>{suitIcon}</div>
     </div>
   );
 };
