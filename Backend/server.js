@@ -243,10 +243,14 @@ io.on('connection', (socket) => {
       }
   });
 
-  socket.on('action', (data) => {
-      handlePlayerAction(socket.id, data.type, data.amount);
+  socket.on('action', ({ action, amount }) => {
+      handlePlayerAction(socket.id, action, amount);
   });
   
+  socket.on('chat_message', (msg) => {
+    io.emit('chat_message', msg);
+  });
+
   socket.on('restart', () => {
       startNewHand();
   });
