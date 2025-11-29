@@ -230,11 +230,13 @@ const startNewHand = (tableId) => {
 
     table.players.forEach(p => {
         if(p) {
+            console.log(`Dealing cards to player ${p.name} for game type ${table.gameType}`);
             if(p.chips === 0 && table.isTournament){
                 handlePlayerElimination(tableId, p.id);
                 return;
             }
             p.hand = table.gameType === 'PLO' ? [table.deck.pop(), table.deck.pop(), table.deck.pop(), table.deck.pop()] : [table.deck.pop(), table.deck.pop()];
+            console.log(`Player ${p.name} has ${p.hand.length} cards`);
             p.currentBet = 0;
             p.hasFolded = false;
             p.isAllIn = false;
