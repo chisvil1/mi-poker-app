@@ -498,11 +498,11 @@ const App = () => {
         
         {view === 'lobby' && (
             <header className="h-16 bg-[#0f0f0f] border-b border-[#333] flex items-center justify-between px-6 z-50 relative">
-                <div className="flex items-center gap-2 select-none">
-                    <span className="text-2xl">♠️</span>
-                    <span className="text-2xl font-black text-white tracking-tighter">CASH<span className="text-red-600">POKER</span></span>
-                </div>
-                <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 select-none">
+                                <span className="text-2xl">♠️</span>
+                                <span className="text-2xl font-black text-white tracking-tighter">CASH<span className="text-red-600">POKER</span></span>
+                                <span className="text-xs text-gray-500 ml-2">v1.0.0</span>
+                            </div>                <div className="flex items-center gap-4">
                     <div className="bg-[#222] rounded-full pl-4 pr-1 py-1 border border-[#444] flex items-center gap-3">
                         <span className="text-green-400 font-mono font-bold tracking-wide">${user.balance ? user.balance.toFixed(2) : '0.00'}</span>
                         <button onClick={()=>setShowCashier(true)} className="bg-green-600 hover:bg-green-500 text-white w-7 h-7 rounded-full flex items-center justify-center font-bold transition">+</button>
