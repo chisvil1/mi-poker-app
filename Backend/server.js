@@ -98,7 +98,7 @@ const broadcastState = (tableId) => {
               
               const formatCard = (c) => c ? { 
                   rank: c.slice(0, -1).replace('T', '10'), 
-                  suit: c.slice(-1).toUpperCase() 
+                  suit: c.slice(-1) 
               } : null;
 
               if (pp.socketId === p.socketId) {
@@ -118,7 +118,7 @@ const broadcastState = (tableId) => {
           
           const communityPublic = table.communityCards.map(c => ({
             rank: c.slice(0, -1).replace('T', '10'), 
-            suit: c.slice(-1).toUpperCase()
+            suit: c.slice(-1)
           }));
 
           console.log(`[broadcastState] Sending update to ${p.name}, hand length:`, playerSpecificPlayers.find(pl => pl && pl.socketId === p.socketId).hand.length);
