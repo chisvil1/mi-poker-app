@@ -103,23 +103,67 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
   return (
     <div className="fixed inset-0 bg-[#1a1a1a] text-white font-sans select-none flex flex-col">
       <header className="h-12 bg-[#0f0f0f] border-b-2 border-green-500 flex items-center justify-between px-4 z-50">
-        {/* ... header content ... */}
+        <div className="flex items-center gap-4">
+          <button onClick={onLeave} className="text-gray-400 hover:text-white flex items-center gap-1 text-sm font-bold uppercase">
+            <LogOut className="w-4 h-4" /> Lobby
+          </button>
+          <span className="text-xs text-gray-400 hidden md:inline">Mesa: {tableConfig?.name || 'Mesa Pública'}</span>
+        </div>
+        <div className="flex items-center gap-4">
+           <span className="text-green-400 font-mono text-sm">${myPlayer?.chips || 0}</span>
+           <button onClick={()=>setShowChat(!showChat)} className="md:hidden text-gray-400"><MessageSquare size={20}/></button>
+        </div>
       </header>
       
-      <div style={{ border: '2px solid red', flex: 1, display: 'flex', position: 'relative' }}>
-        <main style={{ border: '2px solid blue', flex: 1, position: 'relative' }}>
-            <p>Contenido del Main</p>
-            {/* ... table and players rendering ... */}
+      <div className="flex-1 flex relative overflow-hidden" style={{ border: '2px solid red' }}>
+        <main className="flex-1 relative flex items-center justify-center bg-[radial-gradient(circle_at_center,#1a472a_0%,#000000_100%)]" style={{ border: '2px solid blue' }}>
+            <div className="relative w-[95%] max-w-6xl aspect-[2/1] rounded-[200px] shadow-[0_0_100px_rgba(0,0,0,0.8)] border-[12px] border-[#111] bg-[#0a5c2b]">
+                <div className="absolute inset-0 rounded-[180px] border border-[#ffffff10] shadow-inner bg-[url('https://www.transparenttextures.com/patterns/felt.png')] bg-repeat opacity-80"></div>
+                
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-10">
+                    <div className="flex gap-2 h-16 md:h-20">
+                        {gameState.communityCards.map((c,i) => <Card key={i} rank={c?.rank} suit={c?.suit}/>)}
+                    </div>
+                    <PotDisplay totalPot={gameState.pot} />
+                    <div className="text-green-300 font-bold text-sm drop-shadow-md animate-pulse">{gameState.message}</div>
+                </div>
+
+                {visualPlayers.map((p, i) => (
+                    <PlayerSeat key={i} player={p} position={p.position} isMe={p?.name === user.username} isActive={gameState.activePlayerIndex === p?.id} />
+                ))}
+            </div>
         </main>
-        <aside style={{ border: '2px solid yellow', width: '20rem' }}>
-            <p>Contenido del Aside (Chat)</p>
-            {/* ... chat rendering ... */}
+        <aside className={`
+            w-80 bg-[#111] border-l border-[#333] flex flex-col absolute right-0 top-0 bottom-0 z-40 transform transition-transform duration-300
+            ${showChat ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 md:relative
+        `} style={{ border: '2px solid yellow' }}>
+            <GameChat chatMessages={chatMessages} onSendMessage={handleSendMessage} gameLogs={gameState.logs || []} />
         </aside>
       </div>
 
-      <footer style={{ border: '2px solid purple', height: '6rem' }} className="bg-[#121212] flex items-center justify-center">
-        <p>Contenido del Footer</p>
-        {/* ... action buttons ... */}
+      <footer className="h-24 bg-[#121212] border-t border-[#333] flex items-center justify-center gap-4 px-4 z-50" style={{ border: '2px solid purple' }}>
+        {gameState.phase === 'showdown' || gameState.phase === 'lobby' ? (
+           <button onClick={() => socket.emit('restart', { roomId: tableConfig.id.toString() })} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-full shadow-lg active:scale-95 transition-all text-lg animate-pulse">
+             {gameState.phase === 'lobby' ? 'EMPEZAR PARTIDA' : 'SIGUIENTE MANO'}
+           </button>
+        ) : (
+            isMyTurn ? (
+                <div className="flex gap-3 items-end">
+                    <button onClick={() => handleAction('fold')} className="bg-red-900/80 hover:bg-red-700 border border-red-600 text-white font-bold py-3 px-6 rounded-lg active:scale-95 transition">FOLD</button>
+                    <button onClick={() => handleAction(gameState.currentBet > myPlayer.currentBet ? 'call' : 'check')} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg active:scale-95 transition">
+                        {gameState.currentBet > myPlayer.currentBet ? `CALL` : 'CHECK'}
+                    </button>
+                    <div className="flex bg-black/40 rounded-lg p-1 border border-gray-700">
+                        <input type="number" value={userBetAmount} onChange={(e)=>setUserBetAmount(Number(e.target.value))} className="w-20 bg-transparent text-white text-center font-bold outline-none"/>
+                        <button onClick={() => handleAction('raise', gameState.currentBet + userBetAmount)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded active:scale-95 transition">RAISE</button>
+                    </div>
+                </div>
+            ) : (
+                <div className="text-gray-500 italic flex items-center gap-2">
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div> Esperando turno...
+                </div>
+            )
+        )}
       </footer>
     </div>
   );};
