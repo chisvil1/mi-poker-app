@@ -133,12 +133,35 @@ const broadcastState = (tableId) => {
 
 const startNewHand = (tableId) => {
     const table = tables.get(tableId);
-    if (!table || table.players.filter(p=>p).length < 2) {
+    if (!table) return;
+
+    // Rellenar con bots si solo hay un jugador.
+    if (table.players.filter(p => p).length === 1) {
+        let playerIsHuman = table.players.some(p => p && p.isHuman);
+        if (playerIsHuman) {
+            for(let i=0; i<6; i++) {
+                if(table.players[i] === null) {
+                    table.players[i] = { 
+                        id: i, 
+                        socketId: `bot_${i}`, 
+                        name: `Bot ${i}`, 
+                        chips: 1000, 
+                        hand: [], 
+                        currentBet: 0, 
+                        hasFolded: false, 
+                        isAllIn: false, 
+                        isHuman: false 
+                    };
+                }
+            }
+        }
+    }
+
+    if (table.players.filter(p=>p).length < 2) {
         if(table) {
             table.phase = 'lobby';
             table.message = "Esperando más jugadores...";
-            // Notificar a todos
-            io.to(tableId).emit('game_update', { ...table, players: table.players, communityCards: [] });
+            broadcastState(tableId);
         }
         return;
     }
@@ -375,27 +398,8 @@ io.on('connection', (socket) => {
       table.players[seat] = newPlayer;
       socket.join(roomId);
 
-      // Rellenar con Bots si es necesario
-      if (table.players.filter(p=>p).length === 1) {
-           for(let i=0; i<6; i++) {
-               if(table.players[i] === null) {
-                   table.players[i] = { 
-                       id: i, 
-                       socketId: `bot_${i}`, 
-                       name: `Bot ${i}`, 
-                       chips: 1000, 
-                       hand: [], 
-                       currentBet: 0, 
-                       hasFolded: false, 
-                       isAllIn: false, 
-                       isHuman: false 
-                   };
-               }
-           }
-           startNewHand(roomId);
-      } else {
-           broadcastState(roomId);
-      }
+      // Simplemente notificar a todos que un nuevo jugador se ha unido.
+      broadcastState(roomId);
   });
 
   socket.on('action', ({ action, amount }) => {
