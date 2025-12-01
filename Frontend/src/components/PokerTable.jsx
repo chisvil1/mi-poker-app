@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LogOut, MessageSquare, Send } from 'lucide-react';
-import { socket } from '../socket';
-import { playSound } from '../utils/playSound';
+import { socket } from '@/socket';
+import { playSound } from '@/utils/playSound';
 
 const Card = ({ rank, suit, isFaceDown = false, size = 'normal', className = "" }) => {
   const isRed = suit === 'h' || suit === 'd' || suit === '♥️' || suit === '♦️';
