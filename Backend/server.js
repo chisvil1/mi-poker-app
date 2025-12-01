@@ -369,18 +369,21 @@ const botPlay = (tableId, index) => {
     // 3. Simple AI
     if (toCall > 0) {
         // Someone has bet
-        if (handRank >= 4 && random > 0.3) { // Good hand (Two Pair or better)
+        if (handRank >= 4 && random > 0.1) { // Good hand (Two Pair or better) - more likely to call
             handlePlayerAction(bot.socketId, 'call');
-        } else if (handRank >= 2 && random > 0.5) { // Decent hand (Pair)
+        } else if (handRank >= 2 && random > 0.3) { // Decent hand (Pair) - more likely to call
             handlePlayerAction(bot.socketId, 'call');
         } else {
             handlePlayerAction(bot.socketId, 'fold');
         }
     } else {
         // No bet yet
-        if (handRank >= 4 && random > 0.3) { // Good hand
-            const raiseAmount = table.currentBet + table.bigBlind * 2;
+        if (handRank >= 4 && random > 0.1) { // Good hand - more likely to raise
+            const raiseAmount = table.currentBet + table.bigBlind * (random > 0.5 ? 2 : 1); // Vary raise amount
             handlePlayerAction(bot.socketId, 'raise', raiseAmount);
+        } else if (handRank >= 2 && random > 0.7) { // Decent hand, occasional small bet
+            const betAmount = table.bigBlind;
+            handlePlayerAction(bot.socketId, 'raise', betAmount);
         } else {
             handlePlayerAction(bot.socketId, 'check');
         }
