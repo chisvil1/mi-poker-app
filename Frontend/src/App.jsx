@@ -484,7 +484,7 @@ const App = () => {
       alert(`Generando dirección de depósito para ${amount} USD en ${currency} (Conectando a pasarela...)`);
   };
 
-  if (!user) return <AuthScreen onLogin={(u) => handleLogin(u.username)} />;
+  if (!user) return <AuthScreen onLogin={handleLogin} />;
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-gray-200 font-sans flex flex-col overflow-hidden">
