@@ -142,10 +142,18 @@ const broadcastState = (tableId) => {
 };
 
 const startNewHand = (tableId) => {
+    console.log(`[startNewHand] Attempting to start new hand for table ${tableId}`);
     const table = tables.get(tableId);
-    if (!table) return;
+    if (!table) {
+        console.error(`[startNewHand] Error: No table found for id ${tableId}`);
+        return;
+    }
 
-    if (table.players.filter(p=>p).length < 2) {
+    const players_at_table = table.players.filter(p => p);
+    console.log(`[startNewHand] Players at table ${tableId}: ${players_at_table.length}`);
+
+    if (players_at_table.length < 2) {
+        console.log(`[startNewHand] Not enough players to start a new hand. Setting phase to lobby.`);
         if(table) {
             table.phase = 'lobby';
             table.message = "Esperando más jugadores...";
@@ -240,7 +248,10 @@ const nextPhase = (tableId) => {
         table.pot = 0;
         broadcastState(tableId);
         
-        setTimeout(() => startNewHand(tableId), 5000);
+        setTimeout(() => {
+            console.log(`[nextPhase - setTimeout] Triggering startNewHand for table ${tableId}`);
+            startNewHand(tableId)
+        }, 5000);
         return;
     }
     
@@ -284,7 +295,10 @@ const handlePlayerAction = (socketId, action, amount) => {
             table.phase = 'showdown'; // Or some other phase to indicate the hand is over
             table.message = `Ganador: ${winner.name}`;
             broadcastState(tableId);
-            setTimeout(() => startNewHand(tableId), 5000);
+            setTimeout(() => {
+                console.log(`[handlePlayerAction - fold - setTimeout] Triggering startNewHand for table ${tableId}`);
+                startNewHand(tableId)
+            }, 5000);
             return;
         }
     } else if (action === 'call') {
