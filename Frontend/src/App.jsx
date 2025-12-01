@@ -315,8 +315,9 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
         socket.off('connect', onConnect);
         socket.off('game_update');
         socket.off('chat_message');
+        socket.off('error_joining');
     };
-  }, [tableConfig, user]);
+  }, [tableConfig?.id, user.username]);
 
   const handleSendMessage = (text) => {
       socket.emit('chat_message', { player: user.username, text, roomId: tableConfig.id.toString() });
