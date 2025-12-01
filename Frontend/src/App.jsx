@@ -321,7 +321,7 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
       socket.emit('action', { action, amount, roomId: tableConfig.id.toString() });
   };
 
-  if (!gameState) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Conectando a la mesa...</div>;
+  if (!gameState || !gameState.players) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Conectando a la mesa...</div>;
 
   const myIndex = gameState.players.findIndex(p => p && p.name === user.username); 
   const visualPlayers = gameState.players.map((p, i) => {
