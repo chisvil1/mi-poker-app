@@ -184,6 +184,7 @@ const startNewHand = (tableId) => {
             p.hasFolded = false;
             p.isAllIn = false;
             p.isWinner = false;
+            p.hasActed = false;
         }
     });
 
@@ -221,7 +222,7 @@ const nextPhase = (tableId) => {
     const table = tables.get(tableId);
     if(!table) return;
 
-    table.players.forEach(p => { if(p) { table.pot += p.currentBet; p.currentBet = 0; } });
+    table.players.forEach(p => { if(p) { p.hasActed = false; table.pot += p.currentBet; p.currentBet = 0; } });
     table.currentBet = 0;
 
     if (table.phase === 'preflop') {
@@ -289,6 +290,7 @@ const handlePlayerAction = (socketId, action, amount) => {
     }
 
     const player = table.players[playerIndex];
+    player.hasActed = true;
 
     if (action === 'fold') {
         player.hasFolded = true;
@@ -317,6 +319,7 @@ const handlePlayerAction = (socketId, action, amount) => {
             player.chips -= added;
             player.currentBet = totalBet;
             table.currentBet = totalBet;
+            table.players.forEach(p => { if (p && p.socketId !== socketId) p.hasActed = false; });
         }
     }
 
@@ -327,9 +330,10 @@ const handlePlayerAction = (socketId, action, amount) => {
     }
 
     const active = table.players.filter(p => p && !p.hasFolded && !p.isAllIn);
+    const allHaveActed = active.every(p => p.hasActed);
     const allMatched = active.every(p => p.currentBet === table.currentBet);
 
-    if (allMatched && active.length > 0) {
+    if (allMatched && allHaveActed && active.length > 0) {
         nextPhase(tableId);
     } else {
         table.activePlayerIndex = next;
@@ -427,7 +431,8 @@ io.on('connection', (socket) => {
           isHuman: true,
           currentBet: 0,
           hasFolded: false,
-          isAllIn: false
+          isAllIn: false,
+          hasActed: false
       };
       
       table.players[seat] = newPlayer;
