@@ -86,12 +86,12 @@ const broadcastState = (tableId) => {
   const table = tables.get(tableId);
   if (!table) return;
 
-  console.log(`Broadcasting state for table ${tableId}`);
+  console.log(`[broadcastState] Broadcasting state for table ${tableId}`);
 
   // Enviar estado específico a cada jugador para que vean sus propias cartas
   table.players.forEach(p => {
       if (p && p.isHuman) {
-          console.log(`Processing player ${p.name}`);
+          console.log(`[broadcastState] Processing player ${p.name}`);
           const playerSpecificPlayers = table.players.map(pp => {
               if(!pp) return null;
               const showCards = table.phase === 'showdown' && !pp.hasFolded;
@@ -102,7 +102,7 @@ const broadcastState = (tableId) => {
               } : null;
 
               if (pp.socketId === p.socketId) {
-                   console.log(`Player ${p.name} hand:`, p.hand);
+                   console.log(`[broadcastState] Player ${p.name} hand:`, p.hand);
                    return {
                        ...pp,
                        hand: p.hand.map(formatCard)
@@ -121,7 +121,7 @@ const broadcastState = (tableId) => {
             suit: c.slice(-1).toUpperCase()
           }));
 
-          console.log(`Sending update to ${p.name}`, playerSpecificPlayers.find(pl => pl && pl.socketId === p.socketId).hand.length);
+          console.log(`[broadcastState] Sending update to ${p.name}, hand length:`, playerSpecificPlayers.find(pl => pl && pl.socketId === p.socketId).hand.length);
           io.to(p.socketId).emit('game_update', { 
               ...table, 
               players: playerSpecificPlayers,
@@ -143,7 +143,7 @@ const startNewHand = (tableId) => {
         return;
     }
     
-    console.log(`Starting new hand for table ${tableId}`);
+    console.log(`[startNewHand] Starting new hand for table ${tableId}`);
 
     table.deck = createDeck();
     table.pot = table.smallBlind + table.bigBlind;
@@ -154,9 +154,9 @@ const startNewHand = (tableId) => {
 
     table.players.forEach(p => {
         if(p) {
-            console.log(`Dealing cards to player ${p.name}`);
+            console.log(`[startNewHand] Dealing cards to player ${p.name}`);
             p.hand = [table.deck.pop(), table.deck.pop()];
-            console.log(`Player ${p.name} has ${p.hand.length} cards:`, p.hand);
+            console.log(`[startNewHand] Player ${p.name} has ${p.hand.length} cards:`, p.hand);
             p.currentBet = 0;
             p.hasFolded = false;
             p.isAllIn = false;
@@ -304,6 +304,8 @@ const botPlay = (tableId, index) => {
     else handlePlayerAction(bot.socketId, 'check');
 };
 
+app.use(express.static(path.join(__dirname, '../Frontend/dist')));
+
 // --- API DE PAGOS ---
 app.post('/api/create_payment', (req, res) => {
     const { amount, currency, userId } = req.body;
@@ -330,6 +332,13 @@ app.post('/api/create_payment', (req, res) => {
         pay_currency: currency
     });
 });
+
+// The "catchall" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../Frontend/dist/index.html'));
+});
+
 
 // --- SOCKET CONNECTION ---
 io.on('connection', (socket) => {
