@@ -286,6 +286,18 @@ const handlePlayerAction = (socketId, action, amount) => {
 
     if (action === 'fold') {
         player.hasFolded = true;
+        const activePlayers = table.players.filter(p => p && !p.hasFolded);
+        if (activePlayers.length === 1) {
+            const winner = activePlayers[0];
+            winner.chips += table.pot;
+            table.players.forEach(p => { if (p) p.currentBet = 0; });
+            table.pot = 0;
+            table.phase = 'showdown'; // Or some other phase to indicate the hand is over
+            table.message = `Ganador: ${winner.name}`;
+            broadcastState(tableId);
+            setTimeout(() => startNewHand(tableId), 5000);
+            return;
+        }
     } else if (action === 'call') {
         const toCall = table.currentBet - player.currentBet;
         const bet = Math.min(toCall, player.chips);
