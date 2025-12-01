@@ -35,7 +35,8 @@ const NOWPAYMENTS_URL = 'https://api.nowpayments.io/v1';
 const tables = new Map();
 const users = new Map();
 const socketIdToUserId = new Map();
-const pendingPayments = new Map(); 
+const pendingPayments = new Map();
+const expulsionTimers = new Map(); 
 
 // --- UTILIDADES DE PÓKER ---
 const createDeck = () => {
@@ -208,6 +209,13 @@ const startNewHand = (tableId) => {
     table.activePlayerIndex = utg;
     
     broadcastState(tableId);
+
+    // Auto-fold para el primer jugador si está ausente
+    const firstPlayer = table.players[utg];
+    if (firstPlayer && firstPlayer.status === 'away') {
+        console.log(`[Auto-Fold] El primer jugador ${firstPlayer.name} está ausente. Se retira automáticamente.`);
+        setTimeout(() => handlePlayerAction(firstPlayer.socketId, 'fold'), 1000);
+    }
 };
 
 const nextPhase = (tableId) => {
@@ -256,12 +264,19 @@ const nextPhase = (tableId) => {
     }
     
     let next = (table.dealerIndex + 1) % 6;
-    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn) {
+    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn || table.players[next].disconnected) {
         next = (next + 1) % 6;
         if(next === (table.dealerIndex + 1) % 6) break;
     }
     table.activePlayerIndex = next;
     broadcastState(tableId);
+
+    // Auto-fold para el siguiente jugador si está ausente
+    const nextPlayer = table.players[next];
+    if (nextPlayer && nextPlayer.status === 'away') {
+        console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
+        setTimeout(() => handlePlayerAction(nextPlayer.socketId, 'fold'), 1000);
+    }
 };
 
 const handlePlayerAction = (socketId, action, amount) => {
@@ -319,7 +334,7 @@ const handlePlayerAction = (socketId, action, amount) => {
     }
 
     let next = (playerIndex + 1) % 6;
-    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn) {
+    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn || table.players[next].disconnected) {
         next = (next + 1) % 6;
         if(next === playerIndex) break; 
     }
@@ -333,6 +348,13 @@ const handlePlayerAction = (socketId, action, amount) => {
     } else {
         table.activePlayerIndex = next;
         broadcastState(tableId);
+
+        // Auto-fold para el siguiente jugador si está ausente
+        const nextPlayer = table.players[next];
+        if (nextPlayer && nextPlayer.status === 'away') {
+            console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
+            setTimeout(() => handlePlayerAction(nextPlayer.socketId, 'fold'), 1000);
+        }
     }
 };
 
@@ -460,11 +482,36 @@ io.on('connection', (socket) => {
       let table = tables.get(roomId);
       if (!table) table = createNewTable(roomId, { name: "Mesa Pública" });
 
-      // Verificar si el nombre ya está en uso en la mesa
-      const nameInUse = table.players.some(p => p && p.name === playerName);
-      if (nameInUse) {
-          socket.emit('error_joining', { message: 'El nombre de usuario ya está en uso en esta mesa.' });
-          return;
+      // Buscar si ya existe un jugador con el mismo nombre en la mesa
+      const existingPlayer = table.players.find(p => p && p.name === playerName);
+
+      if (existingPlayer) {
+          if (existingPlayer.status === 'away') {
+              // Es una reconexión
+              console.log(`[reconnect] Jugador ${playerName} se está reconectando a la mesa ${roomId}`);
+              existingPlayer.status = 'playing';
+              existingPlayer.socketId = socket.id;
+              
+              // Actualizar el mapeo de socket a userId
+              const oldSocketId = Object.keys(socketIdToUserId).find(key => socketIdToUserId[key] === existingPlayer.userId);
+              if(oldSocketId) socketIdToUserId.delete(oldSocketId);
+              socketIdToUserId.set(socket.id, existingPlayer.userId);
+
+              // Cancelar el temporizador de expulsión
+              const expulsionTimer = expulsionTimers.get(existingPlayer.userId);
+              if (expulsionTimer) {
+                  clearTimeout(expulsionTimer);
+                  expulsionTimers.delete(existingPlayer.userId);
+                  console.log(`[reconnect] Temporizador de expulsión cancelado para ${playerName}`);
+              }
+              
+              broadcastState(roomId);
+              return;
+          } else {
+              // El nombre está en uso por un jugador activo
+              socket.emit('error_joining', { message: 'El nombre de usuario ya está en uso en esta mesa.' });
+              return;
+          }
       }
       
       let seat = table.players.findIndex(p => p === null);
@@ -484,7 +531,8 @@ io.on('connection', (socket) => {
           currentBet: 0,
           hasFolded: false,
           isAllIn: false,
-          hasActed: false
+          hasActed: false,
+          status: 'playing' // 'playing', 'away', 'sitting_out'
       };
       
       table.players[seat] = newPlayer;
@@ -511,18 +559,29 @@ io.on('connection', (socket) => {
     const userId = socketIdToUserId.get(socket.id);
     if (!userId) return;
 
-    // Eliminar al usuario del mapa
-    users.delete(userId);
-    socketIdToUserId.delete(socket.id);
-
-    // Eliminar al jugador de cualquier mesa en la que estuviera
+    // Encontrar al jugador y marcarlo como ausente
     for (const [tableId, table] of tables.entries()) {
         const playerIndex = table.players.findIndex(p => p && p.userId === userId);
         if (playerIndex !== -1) {
-            table.players[playerIndex] = null;
-            console.log(`[disconnect] Jugador ${userId} eliminado de la mesa ${tableId}`);
+            const player = table.players[playerIndex];
+            player.status = 'away';
+            player.disconnectTime = Date.now();
+            console.log(`[disconnect] Jugador ${player.name} marcado como 'away' en la mesa ${tableId}`);
             broadcastState(tableId);
-            break; // Asumimos que un jugador solo puede estar en una mesa a la vez
+
+            // Iniciar temporizador de expulsión (2 minutos)
+            const expulsionTimer = setTimeout(() => {
+                const currentTable = tables.get(tableId);
+                if (currentTable && currentTable.players[playerIndex]?.status === 'away') {
+                    console.log(`[expulsion] Expulsando al jugador ${player.name} de la mesa ${tableId} por inactividad.`);
+                    currentTable.players[playerIndex] = null;
+                    users.delete(userId);
+                    broadcastState(tableId);
+                }
+            }, 120000); // 2 minutos
+
+            expulsionTimers.set(userId, expulsionTimer);
+            break; 
         }
     }
   });
