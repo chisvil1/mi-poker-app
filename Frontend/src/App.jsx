@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import LobbyPage from './pages/LobbyPage';
-import TablePage from './pages/TablePage';
+import LobbyPage from './pages/LobbyPage.jsx';
+import TablePage from './pages/TablePage.jsx';
 
 function App() {
   return (
