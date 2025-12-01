@@ -102,22 +102,26 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
 
   return (
     <div className="fixed inset-0 bg-[#1a1a1a] text-white font-sans select-none flex flex-col">
-      <header className="h-12 bg-[#0f0f0f] border-b border-[#333] flex items-center justify-between px-4 z-50">
-        <div className="flex items-center gap-4">
-          <button onClick={onLeave} className="text-gray-400 hover:text-white flex items-center gap-1 text-sm font-bold uppercase">
-            <LogOut className="w-4 h-4" /> Lobby
-          </button>
-          <span className="text-xs text-gray-400 hidden md:inline">Mesa: {tableConfig?.name || 'Mesa Pública'}</span>
-        </div>
-        <div className="flex items-center gap-4">
-           <span className="text-green-400 font-mono text-sm">${myPlayer?.chips || 0}</span>
-           <button onClick={()=>setShowChat(!showChat)} className="md:hidden text-gray-400"><MessageSquare size={20}/></button>
-        </div>
+      <header className="h-12 bg-[#0f0f0f] border-b-2 border-green-500 flex items-center justify-between px-4 z-50">
+        {/* ... header content ... */}
       </header>
       
-      {/* ... rest of the JSX ... */}
+      <div style={{ border: '2px solid red', flex: 1, display: 'flex', position: 'relative' }}>
+        <main style={{ border: '2px solid blue', flex: 1, position: 'relative' }}>
+            <p>Contenido del Main</p>
+            {/* ... table and players rendering ... */}
+        </main>
+        <aside style={{ border: '2px solid yellow', width: '20rem' }}>
+            <p>Contenido del Aside (Chat)</p>
+            {/* ... chat rendering ... */}
+        </aside>
+      </div>
+
+      <footer style={{ border: '2px solid purple', height: '6rem' }} className="bg-[#121212] flex items-center justify-center">
+        <p>Contenido del Footer</p>
+        {/* ... action buttons ... */}
+      </footer>
     </div>
-  );
-};
+  );};
 
 export default PokerTable;
