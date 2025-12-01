@@ -128,9 +128,9 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
                     <div className="text-green-300 font-bold text-sm drop-shadow-md animate-pulse">{gameState.message}</div>
                 </div>
 
-                {visualPlayers.map((p, i) => (
+                {/* {visualPlayers.map((p, i) => (
                     <PlayerSeat key={i} player={p} position={p.position} isMe={p?.name === user.username} isActive={gameState.activePlayerIndex === p?.id} />
-                ))}
+                ))} */}
             </div>
         </main>
         <aside className={`
