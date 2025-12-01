@@ -459,9 +459,19 @@ io.on('connection', (socket) => {
       const userId = socketIdToUserId.get(socket.id);
       let table = tables.get(roomId);
       if (!table) table = createNewTable(roomId, { name: "Mesa Pública" });
+
+      // Verificar si el nombre ya está en uso en la mesa
+      const nameInUse = table.players.some(p => p && p.name === playerName);
+      if (nameInUse) {
+          socket.emit('error_joining', { message: 'El nombre de usuario ya está en uso en esta mesa.' });
+          return;
+      }
       
       let seat = table.players.findIndex(p => p === null);
-      if (seat === -1) return; 
+      if (seat === -1) {
+          socket.emit('error_joining', { message: 'La mesa está llena.' });
+          return;
+      }
 
       const newPlayer = {
           id: seat,

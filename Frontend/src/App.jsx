@@ -304,6 +304,11 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
         playSound('message');
     });
 
+    socket.on('error_joining', (data) => {
+        alert(`Error al unirse a la mesa: ${data.message}`);
+        onLeave();
+    });
+
     if (socket.connected) onConnect();
 
     return () => {
