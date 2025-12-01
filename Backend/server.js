@@ -266,6 +266,9 @@ const nextPhase = (tableId) => {
     }
     table.activePlayerIndex = next;
     broadcastState(tableId);
+    if (table.players[next] && !table.players[next].isHuman) {
+        setTimeout(() => botPlay(tableId, next), 1000);
+    }
 };
 
 const handlePlayerAction = (socketId, action, amount) => {
@@ -280,7 +283,10 @@ const handlePlayerAction = (socketId, action, amount) => {
         }
     }
 
-    if (!table || table.activePlayerIndex !== playerIndex) return;
+    if (!table || table.activePlayerIndex !== playerIndex) {
+        console.log(`[handlePlayerAction] Action rejected for player ${playerIndex}. Active player is ${table.activePlayerIndex}.`);
+        return;
+    }
 
     const player = table.players[playerIndex];
 
@@ -336,11 +342,24 @@ const handlePlayerAction = (socketId, action, amount) => {
 
 const botPlay = (tableId, index) => {
     const table = tables.get(tableId);
-    if (!table) return;
+    if (!table) {
+        console.log(`[botPlay] No table found for id ${tableId}`);
+        return;
+    }
     const bot = table.players[index];
+    if (!bot) {
+        console.log(`[botPlay] No bot found at index ${index}`);
+        return;
+    }
+    console.log(`[botPlay] Bot ${bot.name} at index ${index} is playing. Active player index is ${table.activePlayerIndex}`);
     const toCall = table.currentBet - bot.currentBet;
-    if (toCall > 0) handlePlayerAction(bot.socketId, 'call');
-    else handlePlayerAction(bot.socketId, 'check');
+    if (toCall > 0) {
+        console.log(`[botPlay] Bot ${bot.name} is calling.`);
+        handlePlayerAction(bot.socketId, 'call');
+    } else {
+        console.log(`[botPlay] Bot ${bot.name} is checking.`);
+        handlePlayerAction(bot.socketId, 'check');
+    }
 };
 
 app.use(express.static(path.join(__dirname, '../Frontend/dist')));
