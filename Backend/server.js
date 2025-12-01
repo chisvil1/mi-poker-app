@@ -356,13 +356,34 @@ const botPlay = (tableId, index) => {
         return;
     }
     console.log(`[botPlay] Bot ${bot.name} at index ${index} is playing. Active player index is ${table.activePlayerIndex}`);
+
+    // 1. Hand Strength Evaluation
+    const hand = Hand.solve(bot.hand.concat(table.communityCards));
+    const handRank = hand.rank;
+    const handName = hand.name;
+
+    // 2. Decision Logic
     const toCall = table.currentBet - bot.currentBet;
+    const random = Math.random();
+
+    // 3. Simple AI
     if (toCall > 0) {
-        console.log(`[botPlay] Bot ${bot.name} is calling.`);
-        handlePlayerAction(bot.socketId, 'call');
+        // Someone has bet
+        if (handRank >= 4 && random > 0.3) { // Good hand (Two Pair or better)
+            handlePlayerAction(bot.socketId, 'call');
+        } else if (handRank >= 2 && random > 0.5) { // Decent hand (Pair)
+            handlePlayerAction(bot.socketId, 'call');
+        } else {
+            handlePlayerAction(bot.socketId, 'fold');
+        }
     } else {
-        console.log(`[botPlay] Bot ${bot.name} is checking.`);
-        handlePlayerAction(bot.socketId, 'check');
+        // No bet yet
+        if (handRank >= 4 && random > 0.3) { // Good hand
+            const raiseAmount = table.currentBet + table.bigBlind * 2;
+            handlePlayerAction(bot.socketId, 'raise', raiseAmount);
+        } else {
+            handlePlayerAction(bot.socketId, 'check');
+        }
     }
 };
 
