@@ -211,6 +211,10 @@ const startNewHand = (tableId) => {
     table.activePlayerIndex = utg;
     
     broadcastState(tableId);
+
+    if (table.players[utg] && !table.players[utg].isHuman) {
+        setTimeout(() => botPlay(tableId, utg), 1000);
+    }
 };
 
 const nextPhase = (tableId) => {
