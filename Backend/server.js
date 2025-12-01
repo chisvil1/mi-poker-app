@@ -505,6 +505,27 @@ io.on('connection', (socket) => {
   socket.on('restart', ({ roomId }) => {
       startNewHand(roomId);
   });
+
+  socket.on('disconnect', () => {
+    console.log('Desconectado:', socket.id);
+    const userId = socketIdToUserId.get(socket.id);
+    if (!userId) return;
+
+    // Eliminar al usuario del mapa
+    users.delete(userId);
+    socketIdToUserId.delete(socket.id);
+
+    // Eliminar al jugador de cualquier mesa en la que estuviera
+    for (const [tableId, table] of tables.entries()) {
+        const playerIndex = table.players.findIndex(p => p && p.userId === userId);
+        if (playerIndex !== -1) {
+            table.players[playerIndex] = null;
+            console.log(`[disconnect] Jugador ${userId} eliminado de la mesa ${tableId}`);
+            broadcastState(tableId);
+            break; // Asumimos que un jugador solo puede estar en una mesa a la vez
+        }
+    }
+  });
 });
 
 server.listen(PORT, () => console.log(`Server Pro running on port ${PORT}`));
