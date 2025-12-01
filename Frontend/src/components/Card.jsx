@@ -1,56 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-const SUIT_MAP = {
-  'S': '♠️',
-  'H': '♥️',
-  'C': '♣️',
-  'D': '♦️',
-};
-
-const Card = ({ rank, suit, isFaceDown = false, size = 'normal', className = "", animate = false }) => {
-  const [isDealt, setIsDealt] = useState(false);
-  const isRed = suit === 'H' || suit === 'D';
-  const suitIcon = SUIT_MAP[suit] || suit;
+const Card = ({ rank, suit, isFaceDown = false, size = 'normal', className = "" }) => {
+  const isRed = suit === 'h' || suit === 'd' || suit === '♥️' || suit === '♦️'; // Soporte para formatos del server
+  const suitIcon = { 's': '♠', 'h': '♥', 'c': '♣', 'd': '♦', '♠️': '♠', '♥️': '♥', '♣️': '♣', '♦️': '♦' }[suit] || suit;
   
-  useEffect(() => {
-    if (animate) {
-      const timer = setTimeout(() => setIsDealt(true), 100); // Small delay to trigger animation
-      return () => clearTimeout(timer);
-    }
-  }, [animate]);
-
-  const sizeClasses = {
-    normal: 'w-10 h-14 md:w-14 md:h-20',
-    small: 'w-8 h-12 md:w-10 md:h-14 text-xs',
+  const sizeClasses = { 
+    normal: 'w-10 h-14 md:w-14 md:h-20', 
+    small: 'w-8 h-12 md:w-10 md:h-14 text-xs' 
   };
-
   const currentSizeClass = sizeClasses[size] || sizeClasses.normal;
-  const animationClass = animate && !isDealt ? 'deal-in-start' : 'deal-in-end';
 
-  if (isFaceDown) {
+  if (isFaceDown || !rank) {
     return (
-      <div 
-        className={`${currentSizeClass} rounded-md border border-base-300 shadow-xl relative overflow-hidden transform transition-all duration-500 hover:-translate-y-2 ${className} ${animationClass}`}
-        style={{
-            backgroundColor: '#a22',
-            backgroundImage: `
-                radial-gradient(circle at 20% 20%, #fff4, #fff0 30%),
-                radial-gradient(circle at 80% 80%, #fff4, #fff0 30%),
-                repeating-linear-gradient(45deg, #0002 0, #0002 5px, #0000 5px, #0000 10px)
-            `,
-        }}
-      >
-        <div className="absolute inset-1 border-2 border-white/40 rounded-sm flex items-center justify-center">
-            <div className="w-4 h-4 rounded-full bg-white/40"></div>
-        </div>
+      <div className={`${currentSizeClass} rounded-md border border-gray-900 shadow-xl relative overflow-hidden transform transition-all duration-500 hover:-translate-y-2 bg-[#6b0f0f] ${className}`}>
+        <div className="absolute inset-1 border border-white/20 rounded-sm"></div>
       </div>
     );
   }
 
   return (
-    <div className={`${currentSizeClass} bg-white rounded-md shadow-xl border border-gray-300 flex flex-col items-center justify-center p-1 select-none transition-transform duration-300 hover:-translate-y-2 ${className} ${animationClass}`}>
-      <div className={`text-lg md:text-xl font-bold ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
-      <div className={`text-2xl md:text-4xl ${isRed ? 'text-red-600' : 'text-black'}`}>{suitIcon}</div>
+    <div className={`${currentSizeClass} bg-white rounded-md shadow-xl border border-gray-300 flex flex-col items-center justify-between p-1 select-none transition-transform duration-300 hover:-translate-y-2 ${className}`}>
+      <div className={`text-xs md:text-sm font-bold self-start ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
+      <div className={`text-lg md:text-2xl ${isRed ? 'text-red-600' : 'text-black'}`}>{suitIcon}</div>
     </div>
   );
 };

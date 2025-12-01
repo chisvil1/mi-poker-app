@@ -31,12 +31,10 @@ const GameChat = ({ chatMessages, onSendMessage, gameLogs }) => {
                             <span className="font-bold text-gray-400">{msg.player}: </span>
                             <span className="text-gray-200">{msg.text}</span>
                         </div>
-                    )) : <div className="text-gray-600 text-center mt-4">¡Saluda a la mesa!</div>
+                    )) : <div className="text-gray-600 text-center mt-4">¡Di hola!</div>
                 ) : (
                     gameLogs.map((log, i) => (
-                        <div key={i} className="text-gray-400 border-b border-gray-800/50 pb-1 mb-1 last:border-0">
-                            {log}
-                        </div>
+                        <div key={i} className="text-gray-400 border-b border-gray-800/50 pb-1 mb-1 last:border-0">{log}</div>
                     ))
                 )}
                 <div ref={messagesEndRef} />

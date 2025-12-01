@@ -1,35 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LogOut, MessageSquare, Send } from 'lucide-react';
+import { LogOut, MessageSquare } from 'lucide-react';
 import { socket } from '@/socket';
 import { playSound } from '@/utils/playSound';
-
-const Card = ({ rank, suit, isFaceDown = false, size = 'normal', className = "" }) => {
-  const isRed = suit === 'h' || suit === 'd' || suit === '♥️' || suit === '♦️';
-  const suitIcon = { 's': '♠', 'h': '♥', 'c': '♣', 'd': '♦', '♠️': '♠', '♥️': '♥', '♣️': '♣', '♦️': '♦' }[suit] || suit;
-  
-  const sizeClasses = { 
-    normal: 'w-10 h-14 md:w-14 md:h-20', 
-    small: 'w-8 h-12 md:w-10 md:h-14 text-xs' 
-  };
-  const currentSizeClass = sizeClasses[size] || sizeClasses.normal;
-
-  if (isFaceDown || !rank) {
-    return (
-      <div className={`${currentSizeClass} rounded-md border border-gray-900 shadow-xl relative overflow-hidden transform transition-all duration-500 hover:-translate-y-2 bg-[#6b0f0f] ${className}`}>
-        <div className="absolute inset-1 border border-white/20 rounded-sm"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${currentSizeClass} bg-white rounded-md shadow-xl border border-gray-300 flex flex-col items-center justify-between p-1 select-none transition-transform duration-300 hover:-translate-y-2 ${className}`}>
-      <div className={`text-xs md:text-sm font-bold self-start ${isRed ? 'text-red-600' : 'text-black'}`}>{rank}</div>
-      <div className={`text-lg md:text-2xl ${isRed ? 'text-red-600' : 'text-black'}`}>{suitIcon}</div>
-    </div>
-  );
-};
-
-// ... (ChipStack, DealerButton, PotDisplay, PlayerSeat, GameChat can also be here or in their own files)
+import Card from '@/components/Card';
+import ChipStack from '@/components/ChipStack';
+import DealerButton from '@/components/DealerButton';
+import PotDisplay from '@/components/PotDisplay';
+import PlayerSeat from '@/components/PlayerSeat';
+import GameChat from '@/components/GameChat';
 
 const PokerTable = ({ tableConfig, user, onLeave }) => {
   const [gameState, setGameState] = useState(null);
@@ -39,7 +17,7 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
   const [showChat, setShowChat] = useState(false);
 
   const SEAT_POSITIONS = [
-    { id: 0, top: '82%', left: '50%', align: 'bottom' }, 
+    { id: 0, top: '82%', left: '50%', align: 'bottom' },
     { id: 1, top: '60%', left: '15%', align: 'left' },
     { id: 2, top: '25%', left: '20%', align: 'left' },
     { id: 3, top: '15%', left: '50%', align: 'top' },
@@ -90,7 +68,9 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
       socket.emit('action', { action, amount, roomId: tableConfig.id.toString() });
   };
 
-  if (!gameState || !gameState.players) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Conectando a la mesa...</div>;
+  if (!gameState || !gameState.players) {
+    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Conectando a la mesa...</div>;
+  }
 
   const myIndex = gameState.players.findIndex(p => p && p.name === user.username); 
   const visualPlayers = gameState.players.map((p, i) => {
@@ -101,8 +81,8 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
   const isMyTurn = gameState.activePlayerIndex === myIndex;
 
   return (
-    <div className="fixed inset-0 bg-[#1a1a1a] text-white font-sans select-none flex flex-col">
-      <header className="h-12 bg-[#0f0f0f] border-b-2 border-green-500 flex items-center justify-between px-4 z-50">
+    <div className="fixed inset-0 bg-[#1a1a1a] text-white font-sans select-none flex flex-col h-screen">
+      <header className="h-12 bg-[#0f0f0f] border-b border-[#333] flex items-center justify-between px-4 z-50 flex-shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={onLeave} className="text-gray-400 hover:text-white flex items-center gap-1 text-sm font-bold uppercase">
             <LogOut className="w-4 h-4" /> Lobby
@@ -115,8 +95,8 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
         </div>
       </header>
       
-      <div className="flex-1 flex relative overflow-hidden" style={{ border: '2px solid red' }}>
-        <main className="flex-1 relative flex items-center justify-center bg-[radial-gradient(circle_at_center,#1a472a_0%,#000000_100%)]" style={{ border: '2px solid blue' }}>
+      <div className="flex-1 flex relative overflow-hidden">
+        <main className="flex-1 relative flex items-center justify-center bg-[radial-gradient(circle_at_center,#1a472a_0%,#000000_100%)]">
             <div className="relative w-[95%] max-w-6xl aspect-[2/1] rounded-[200px] shadow-[0_0_100px_rgba(0,0,0,0.8)] border-[12px] border-[#111] bg-[#0a5c2b]">
                 <div className="absolute inset-0 rounded-[180px] border border-[#ffffff10] shadow-inner bg-[url('https://www.transparenttextures.com/patterns/felt.png')] bg-repeat opacity-80"></div>
                 
@@ -128,20 +108,17 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
                     <div className="text-green-300 font-bold text-sm drop-shadow-md animate-pulse">{gameState.message}</div>
                 </div>
 
-                {/* {visualPlayers.map((p, i) => (
+                {visualPlayers.map((p, i) => (
                     <PlayerSeat key={i} player={p} position={p.position} isMe={p?.name === user.username} isActive={gameState.activePlayerIndex === p?.id} />
-                ))} */}
+                ))}
             </div>
         </main>
-        <aside className={`
-            w-80 bg-[#111] border-l border-[#333] flex flex-col absolute right-0 top-0 bottom-0 z-40 transform transition-transform duration-300
-            ${showChat ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 md:relative
-        `} style={{ border: '2px solid yellow' }}>
+        <aside className={`w-80 bg-[#111] border-l border-[#333] flex flex-col absolute right-0 top-0 bottom-0 z-40 transform transition-transform duration-300 ${showChat ? 'translate-x-0' : 'translate-x-full'} md:relative md:translate-x-0`}>
             <GameChat chatMessages={chatMessages} onSendMessage={handleSendMessage} gameLogs={gameState.logs || []} />
         </aside>
       </div>
 
-      <footer className="h-24 bg-[#121212] border-t border-[#333] flex items-center justify-center gap-4 px-4 z-50" style={{ border: '2px solid purple' }}>
+      <footer className="h-24 bg-[#121212] border-t border-[#333] flex items-center justify-center gap-4 px-4 z-50 flex-shrink-0">
         {gameState.phase === 'showdown' || gameState.phase === 'lobby' ? (
            <button onClick={() => socket.emit('restart', { roomId: tableConfig.id.toString() })} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-full shadow-lg active:scale-95 transition-all text-lg animate-pulse">
              {gameState.phase === 'lobby' ? 'EMPEZAR PARTIDA' : 'SIGUIENTE MANO'}
@@ -166,6 +143,7 @@ const PokerTable = ({ tableConfig, user, onLeave }) => {
         )}
       </footer>
     </div>
-  );};
+  );
+};
 
 export default PokerTable;
