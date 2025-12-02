@@ -455,27 +455,36 @@ io.on('connection', (socket) => {
       socket.emit('logged_in', { userId, username, balance: 1000 });
   });
 
-  socket.on('join_game', ({ roomId, playerName }) => {
+  socket.on('join_game', ({ roomId, playerName, buyInAmount = 1000 }) => { // Default buy-in for now
       const userId = socketIdToUserId.get(socket.id);
+      const user = users.get(userId);
+
+      if (!user) {
+          socket.emit('error_joining', { message: 'Usuario no encontrado.' });
+          return;
+      }
+
+      if (user.balance < buyInAmount) {
+          socket.emit('error_joining', { message: 'Saldo insuficiente para el buy-in.' });
+          return;
+      }
+
       let table = tables.get(roomId);
       if (!table) table = createNewTable(roomId, { name: "Mesa Pública" });
 
-      // Buscar si ya existe un jugador con el mismo nombre en la mesa
       const existingPlayer = table.players.find(p => p && p.name === playerName);
 
       if (existingPlayer) {
           if (existingPlayer.status === 'away') {
-              // Es una reconexión
+              // Reconnection logic remains the same
               console.log(`[reconnect] Jugador ${playerName} se está reconectando a la mesa ${roomId}`);
               existingPlayer.status = 'playing';
               existingPlayer.socketId = socket.id;
               
-              // Actualizar el mapeo de socket a userId
               const oldSocketId = Object.keys(socketIdToUserId).find(key => socketIdToUserId[key] === existingPlayer.userId);
               if(oldSocketId) socketIdToUserId.delete(oldSocketId);
               socketIdToUserId.set(socket.id, existingPlayer.userId);
 
-              // Cancelar el temporizador de expulsión
               const expulsionTimer = expulsionTimers.get(existingPlayer.userId);
               if (expulsionTimer) {
                   clearTimeout(expulsionTimer);
@@ -486,7 +495,6 @@ io.on('connection', (socket) => {
               broadcastState(roomId);
               return;
           } else {
-              // El nombre está en uso por un jugador activo
               socket.emit('error_joining', { message: 'El nombre de usuario ya está en uso en esta mesa.' });
               return;
           }
@@ -497,13 +505,17 @@ io.on('connection', (socket) => {
           socket.emit('error_joining', { message: 'La mesa está llena.' });
           return;
       }
+      
+      // Deduct buy-in from lobby balance and update chips
+      user.balance -= buyInAmount;
+      io.to(socket.id).emit('balance_update', user.balance);
 
       const newPlayer = {
           id: seat,
           userId,
           socketId: socket.id,
           name: playerName,
-          chips: 1000,
+          chips: buyInAmount, // Use the buy-in amount
           hand: [],
           isHuman: true,
           currentBet: 0,
@@ -516,7 +528,6 @@ io.on('connection', (socket) => {
       table.players[seat] = newPlayer;
       socket.join(roomId);
 
-      // Simplemente notificar a todos que un nuevo jugador se ha unido.
       broadcastState(roomId);
   });
 
@@ -530,6 +541,29 @@ io.on('connection', (socket) => {
   
   socket.on('restart', ({ roomId }) => {
       startNewHand(roomId);
+  });
+
+  socket.on('leave_game', () => {
+    const userId = socketIdToUserId.get(socket.id);
+    if (!userId) return;
+
+    for (const [tableId, table] of tables.entries()) {
+        const playerIndex = table.players.findIndex(p => p && p.userId === userId);
+        if (playerIndex !== -1) {
+            const player = table.players[playerIndex];
+            const user = users.get(userId);
+            
+            if (user && player) {
+                console.log(`[leave_game] Jugador ${player.name} saliendo de la mesa ${tableId} con ${player.chips} fichas.`);
+                user.balance += player.chips;
+                io.to(socket.id).emit('balance_update', user.balance);
+            }
+
+            table.players[playerIndex] = null;
+            broadcastState(tableId);
+            break;
+        }
+    }
   });
 
   socket.on('disconnect', () => {

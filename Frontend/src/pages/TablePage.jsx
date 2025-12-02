@@ -2,6 +2,8 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PokerTable from '@/components/PokerTable'; 
 
+import { socket } from '@/socket';
+
 const TablePage = () => {
   const { tableId } = useParams();
   const navigate = useNavigate();
@@ -21,6 +23,7 @@ const TablePage = () => {
   const tableConfig = { id: parseInt(tableId), name: `Mesa ${tableId}` };
 
   const handleLeaveTable = () => {
+    socket.emit('leave_game');
     window.close();
   };
 
