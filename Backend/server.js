@@ -368,8 +368,6 @@ app.post('/api/create_payment', async (req, res) => {
     if (!amount || parseFloat(amount) < 10) return res.status(400).json({ error: 'Monto insuficiente.' });
 
     try {
-        // En un entorno de producción, descomenta esto para llamar a NowPayments:
-        /*
         const response = await fetch(`${NOWPAYMENTS_URL}/payment`, {
             method: 'POST',
             headers: { 'x-api-key': NOWPAYMENTS_API_KEY, 'Content-Type': 'application/json' },
@@ -383,37 +381,17 @@ app.post('/api/create_payment', async (req, res) => {
             })
         });
         const paymentData = await response.json();
-        */
 
-        // --- SIMULACIÓN PARA DEMO (Borrar esto en producción) ---
-        const mockPaymentData = {
-            payment_id: `pay_${Date.now()}`,
-            pay_address: YOUR_PAYOUT_ADDRESS, // Usamos la dirección real en la demo
-            pay_amount: (parseFloat(amount) / 65000).toFixed(6), // Ejemplo BTC
-            pay_currency: currency.toLowerCase(),
-            order_id: `order_${Date.now()}`
-        };
+        if (!response.ok) {
+            console.error("Error desde NowPayments:", paymentData);
+            return res.status(response.status).json({ error: 'Error al crear el pago en NowPayments.', details: paymentData });
+        }
 
-        // Simular éxito a los 10 segundos
-        setTimeout(() => {
-            // This function does not exist in the original code. I will assume it should have been completePayment
-            // completePayment(mockPaymentData.payment_id);
-            const payment = pendingPayments.get(mockPaymentData.payment_id);
-            if(payment) {
-                const user = users.get(payment.userId);
-                if(user) {
-                    user.balance += payment.amount;
-                    io.to(user.socketId).emit('payment_success', { newBalance: user.balance, added: payment.amount });
-                    io.to(user.socketId).emit('balance_update', user.balance);
-                }
-            }
-        }, 10000);
-        // -----------------------------------------------------
-
-        pendingPayments.set(mockPaymentData.payment_id, { userId, amount: parseFloat(amount), status: 'waiting' });
-        res.json(mockPaymentData);
+        pendingPayments.set(paymentData.payment_id, { userId, amount: parseFloat(amount), status: 'waiting' });
+        res.json(paymentData);
 
     } catch (error) {
+        console.error("Error de red o interno al llamar a NowPayments:", error);
         res.status(500).json({ error: 'Error interno o de red.' });
     }
 });
