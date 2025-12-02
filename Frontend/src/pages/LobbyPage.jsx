@@ -11,10 +11,12 @@ const LobbyPage = () => {
   const [showCashier, setShowCashier] = useState(false);
 
   useEffect(() => {
-    // This component now manages the primary user session
     const storedUser = localStorage.getItem('pokerUser');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const user_data = JSON.parse(storedUser);
+      setUser(user_data);
+      // Re-autenticar la sesión del socket al cargar la página
+      socket.emit('reauthenticate', { userId: user_data.userId });
     }
 
     const handleLoggedIn = (userData) => {
@@ -24,8 +26,9 @@ const LobbyPage = () => {
 
     const handleBalanceUpdate = (newBalance) => {
         setUser(prev => {
+            if (!prev) return null; // Prevenir error si el usuario se desloguea
             const updatedUser = { ...prev, balance: newBalance };
-            localStorage.setItem('pokerUser', JSON.stringify(updatedUser)); // Keep localStorage in sync
+            localStorage.setItem('pokerUser', JSON.stringify(updatedUser));
             return updatedUser;
         });
     };

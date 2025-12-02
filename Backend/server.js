@@ -450,9 +450,36 @@ io.on('connection', (socket) => {
 
   socket.on('login', ({ username }) => {
       let userId = `user_${socket.id}`;
-      users.set(userId, { id: userId, username, balance: 1000, socketId: socket.id });
-      socketIdToUserId.set(socket.id, userId);
+      // Evitar sobreescribir si ya existe, aunque el flujo normal no debería permitirlo
+      if (!users.has(userId)) {
+          users.set(userId, { id: userId, username, balance: 1000, socketId: socket.id });
+          socketIdToUserId.set(socket.id, userId);
+      }
       socket.emit('logged_in', { userId, username, balance: 1000 });
+  });
+
+  socket.on('reauthenticate', (authPayload) => {
+    if (authPayload && authPayload.userId && users.has(authPayload.userId)) {
+        const user = users.get(authPayload.userId);
+        console.log(`[reauthenticate] Re-autenticando al usuario ${user.username} con nuevo socket ${socket.id}`);
+
+        // Limpiar cualquier socketId antiguo asociado a este userId
+        for (const [sid, uid] of socketIdToUserId.entries()) {
+            if (uid === user.id) {
+                socketIdToUserId.delete(sid);
+                break;
+            }
+        }
+
+        // Actualizar con el nuevo socketId
+        user.socketId = socket.id;
+        socketIdToUserId.set(socket.id, user.id);
+        
+        // Confirmar al cliente
+        socket.emit('reauthenticated');
+    } else {
+        socket.emit('reauthentication_failed');
+    }
   });
 
   socket.on('join_game', ({ roomId, playerName, buyInAmount = 1000 }) => { // Default buy-in for now
