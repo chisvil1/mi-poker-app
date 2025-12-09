@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto'); 
 // Recuerda instalar: npm install pokersolver
+const logger = require('./utils/logger');
 const Hand = require('pokersolver').Hand; 
 
 const app = express();
@@ -79,7 +80,7 @@ const determineWinners = (table) => {
         const winnerHands = Hand.winners(hands); 
         return winnerHands.map(wHand => wHand.player);
     } catch (e) {
-        console.error("Error evaluando manos:", e);
+        logger.error(`Error evaluando manos: ${e.message}`, "E001");
         // Fallback: gana el primero activo (solo si falla la librería)
         return [activePlayers[0]];
     }
@@ -107,6 +108,7 @@ const createNewTable = (tableId, options = {}) => {
     gameType: options.gameType || 'NLH', 
   };
   tables.set(tableId, newTable);
+  logger.info(`Table ${tableId} created.`, 'I001');
   return newTable;
 };
 
@@ -169,18 +171,18 @@ const broadcastState = (tableId) => {
 };
 
 const startNewHand = (tableId) => {
-    console.log(`[startNewHand] Attempting to start new hand for table ${tableId}`);
+    logger.info(`Attempting to start new hand for table ${tableId}`, 'I002');
     const table = tables.get(tableId);
     if (!table) {
-        console.error(`[startNewHand] Error: No table found for id ${tableId}`);
+        logger.error(`Error: No table found for id ${tableId}`, "E002");
         return;
     }
 
     const players_at_table = table.players.filter(p => p);
-    console.log(`[startNewHand] Players at table ${tableId}: ${players_at_table.length}`);
+    logger.info(`Players at table ${tableId}: ${players_at_table.length}`, 'I003');
 
     if (players_at_table.length < 2) {
-        console.log(`[startNewHand] Not enough players to start a new hand. Setting phase to lobby.`);
+        logger.info(`Not enough players to start a new hand. Setting phase to lobby.`, 'I004');
         if(table) {
             table.phase = 'lobby';
             table.message = "Esperando más jugadores...";
@@ -189,7 +191,7 @@ const startNewHand = (tableId) => {
         return;
     }
     
-    console.log(`[startNewHand] Starting new hand for table ${tableId}`);
+    logger.info(`Starting new hand for table ${tableId}`, 'I005');
 
     table.deck = createDeck();
     table.pot = table.smallBlind + table.bigBlind;
@@ -200,9 +202,7 @@ const startNewHand = (tableId) => {
 
     table.players.forEach(p => {
         if(p) {
-            console.log(`[startNewHand] Dealing cards to player ${p.name}`);
             p.hand = [table.deck.pop(), table.deck.pop()];
-            console.log(`[startNewHand] Player ${p.name} has ${p.hand.length} cards:`, p.hand);
             p.currentBet = 0;
             p.hasFolded = false;
             p.isAllIn = false;
@@ -241,7 +241,7 @@ const startNewHand = (tableId) => {
     if (firstPlayer && !firstPlayer.isHuman) {
         triggerBotAction(firstPlayer, tableId);
     } else if (firstPlayer && firstPlayer.status === 'away') {
-        console.log(`[Auto-Fold] El primer jugador ${firstPlayer.name} está ausente. Se retira automáticamente.`);
+        logger.info(`El primer jugador ${firstPlayer.name} está ausente. Se retira automáticamente.`, 'I006');
         setTimeout(() => handleAction(tableId, utg, 'fold'), 1000);
     }
 };
@@ -305,12 +305,6 @@ const nextPhase = (tableId) => {
                 if(p) {
                     p.chips += winAmount;
                     p.isWinner = true;
-                    // Actualizar saldo global si es humano
-                    if(p.isHuman && users.has(p.userId)) {
-                        const user = users.get(p.userId);
-                        user.balance += p.chips - (p.buyIn || 0); 
-                        io.to(user.socketId).emit('balance_update', user.balance);
-                    }
                 }
             });
             table.message = `Ganador: ${winners.map(w=>w.name).join(', ')}`;
@@ -334,7 +328,7 @@ const nextPhase = (tableId) => {
         if (!nextPlayer.isHuman) {
             triggerBotAction(nextPlayer, tableId);
         } else if (nextPlayer.status === 'away') {
-            console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
+            logger.info(`El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`, 'I007');
             setTimeout(() => handleAction(tableId, next, 'fold'), 1000);
         }
     }
@@ -343,7 +337,7 @@ const nextPhase = (tableId) => {
 const triggerBotAction = (player, tableId) => {
     if (!player || player.isHuman) return;
 
-    console.log(`[Bot Action] Triggering action for bot: ${player.name}`);
+    logger.info(`Triggering action for bot: ${player.name}`, 'I008');
     const table = tables.get(tableId);
     if (!table) return;
 
@@ -357,14 +351,14 @@ const triggerBotAction = (player, tableId) => {
 const handleAction = (tableId, playerIndex, action, amount) => {
     const table = tables.get(tableId);
     if (!table || table.activePlayerIndex !== playerIndex) {
-        console.log(`[handleAction] Action rejected for player ${playerIndex}. Active player is ${table.activePlayerIndex}.`);
+        logger.warn(`Action rejected for player ${playerIndex}. Active player is ${table.activePlayerIndex}.`, 'W001');
         return;
     }
 
     const player = table.players[playerIndex];
     if (!player) return;
     
-    console.log(`[handleAction] Processing action: ${action} from player: ${player.name}`);
+    logger.info(`Processing action: ${action} from player: ${player.name}`, 'I009');
     player.hasActed = true;
 
     if (action === 'fold') {
@@ -397,6 +391,7 @@ const handleAction = (tableId, playerIndex, action, amount) => {
         } else {
              // Si la acción no es válida, simplemente no hacemos nada y dejamos que el jugador actúe de nuevo.
              // En un futuro, se podría emitir un error al cliente.
+             logger.warn(`Invalid raise from ${player.name}. Amount: ${amount}`, 'W002');
              player.hasActed = false;
              return;
         }
@@ -431,7 +426,7 @@ const handleAction = (tableId, playerIndex, action, amount) => {
              if (!nextPlayer.isHuman) {
                 triggerBotAction(nextPlayer, tableId);
              } else if (nextPlayer.status === 'away') {
-                 console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
+                 logger.info(`El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`, 'I007');
                  setTimeout(() => handleAction(tableId, next, 'fold'), 1000);
              }
         }
@@ -479,7 +474,7 @@ app.post('/api/create_payment', async (req, res) => {
         const paymentData = await response.json();
 
         if (!response.ok) {
-            console.error("Error desde NowPayments:", paymentData);
+            logger.error(`Error desde NowPayments: ${JSON.stringify(paymentData)}`, 'E003');
             return res.status(response.status).json({ error: 'Error al crear el pago en NowPayments.', details: paymentData });
         }
 
@@ -487,7 +482,7 @@ app.post('/api/create_payment', async (req, res) => {
         res.json(paymentData);
 
     } catch (error) {
-        console.error("Error de red o interno al llamar a NowPayments:", error);
+        logger.error(`Error de red o interno al llamar a NowPayments: ${error.message}`, 'E004');
         res.status(500).json({ error: 'Error interno o de red.' });
     }
 });
@@ -502,7 +497,7 @@ app.post('/api/webhook', (req, res) => {
 
     if (signature !== generatedSignature) {
         // Si no coinciden, es un intento de fraude
-        console.error('ALERTA DE SEGURIDAD: Firma IPN inválida!');
+        logger.error('ALERTA DE SEGURIDAD: Firma IPN inválida!', 'E005');
         return res.status(403).send('Firma IPN inválida');
     }
 
@@ -526,7 +521,7 @@ app.post('/api/webhook', (req, res) => {
             }
         }
     } catch (e) {
-        console.error('Error al parsear el Webhook:', e);
+        logger.error(`Error al parsear el Webhook: ${e.message}`, 'E006');
     }
 
     res.status(200).send('ok');
@@ -542,7 +537,7 @@ app.get('*', (req, res) => {
 
 // --- SOCKET CONNECTION ---
 io.on('connection', (socket) => {
-  console.log('Conectado:', socket.id);
+  logger.info(`Conectado: ${socket.id}`, 'I010');
 
   socket.on('login', ({ username }) => {
       let userId = `user_${socket.id}`;
@@ -550,14 +545,16 @@ io.on('connection', (socket) => {
       if (!users.has(userId)) {
           users.set(userId, { id: userId, username, balance: 1000, socketId: socket.id });
           socketIdToUserId.set(socket.id, userId);
+          logger.info(`User ${username} created with balance: 1000`, 'I-LGN-01');
       }
-      socket.emit('logged_in', { userId, username, balance: 1000 });
+      socket.emit('logged_in', { userId, username, balance: users.get(userId).balance });
   });
 
   socket.on('reauthenticate', (authPayload) => {
+    logger.info(`Attempting to reauthenticate userId: ${authPayload.userId}`, 'I-RAU-01');
     if (authPayload && authPayload.userId && users.has(authPayload.userId)) {
         const user = users.get(authPayload.userId);
-        console.log(`[reauthenticate] Re-autenticando al usuario ${user.username} con nuevo socket ${socket.id}`);
+        logger.info(`User ${user.username} found for re-authentication with balance: ${user.balance}`, 'I-RAU-02');
 
         // Limpiar cualquier socketId antiguo asociado a este userId
         for (const [sid, uid] of socketIdToUserId.entries()) {
@@ -586,6 +583,8 @@ io.on('connection', (socket) => {
           socket.emit('error_joining', { message: 'Usuario no encontrado.' });
           return;
       }
+      
+      logger.info(`User ${user.username} attempting to join table ${roomId}. Balance: ${user.balance}, Buy-in: ${buyInAmount}`, 'I-JGM-01');
 
       if (user.balance < buyInAmount) {
           socket.emit('error_joining', { message: 'Saldo insuficiente para el buy-in.' });
@@ -600,7 +599,7 @@ io.on('connection', (socket) => {
       if (existingPlayer) {
           if (existingPlayer.status === 'away') {
               // Reconnection logic remains the same
-              console.log(`[reconnect] Jugador ${playerName} se está reconectando a la mesa ${roomId}`);
+              logger.info(`Jugador ${playerName} se está reconectando a la mesa ${roomId}`, 'I012');
               existingPlayer.status = 'playing';
               existingPlayer.socketId = socket.id;
               
@@ -612,7 +611,7 @@ io.on('connection', (socket) => {
               if (expulsionTimer) {
                   clearTimeout(expulsionTimer);
                   expulsionTimers.delete(existingPlayer.userId);
-                  console.log(`[reconnect] Temporizador de expulsión cancelado para ${playerName}`);
+                  logger.info(`Temporizador de expulsión cancelado para ${playerName}`, 'I013');
               }
               
               broadcastState(roomId);
@@ -631,6 +630,7 @@ io.on('connection', (socket) => {
       
       // Deduct buy-in from lobby balance and update chips
       user.balance -= buyInAmount;
+      logger.info(`User ${user.username} balance updated to: ${user.balance} after buy-in.`, 'I-JGM-02');
       io.to(socket.id).emit('balance_update', user.balance);
 
       const newPlayer = {
@@ -677,8 +677,9 @@ io.on('connection', (socket) => {
             const user = users.get(userId);
             
             if (user && player) {
-                console.log(`[leave_game] Jugador ${player.name} saliendo de la mesa ${tableId} con ${player.chips} fichas.`);
+                logger.info(`Jugador ${player.name} saliendo de la mesa ${tableId} con ${player.chips} fichas.`, 'I014');
                 user.balance += player.chips;
+                logger.info(`User ${user.username} balance updated to: ${user.balance} after leaving table.`, 'I-LGM-01');
                 io.to(socket.id).emit('balance_update', user.balance);
             }
 
@@ -690,7 +691,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('Desconectado:', socket.id);
+    logger.info(`Desconectado: ${socket.id}`, 'I015');
     const userId = socketIdToUserId.get(socket.id);
     if (!userId) return;
 
@@ -701,14 +702,14 @@ io.on('connection', (socket) => {
             const player = table.players[playerIndex];
             player.status = 'away';
             player.disconnectTime = Date.now();
-            console.log(`[disconnect] Jugador ${player.name} marcado como 'away' en la mesa ${tableId}`);
+            logger.info(`Jugador ${player.name} marcado como 'away' en la mesa ${tableId}`, 'I016');
             broadcastState(tableId);
 
             // Iniciar temporizador de expulsión (2 minutos)
             const expulsionTimer = setTimeout(() => {
                 const currentTable = tables.get(tableId);
                 if (currentTable && currentTable.players[playerIndex]?.status === 'away') {
-                    console.log(`[expulsion] Expulsando al jugador ${player.name} de la mesa ${tableId} por inactividad.`);
+                    logger.info(`Expulsando al jugador ${player.name} de la mesa ${tableId} por inactividad.`, 'I017');
                     currentTable.players[playerIndex] = null;
                     users.delete(userId);
                     broadcastState(tableId);
@@ -752,12 +753,12 @@ const addBotIfNeeded = (tableId) => {
                 status: 'playing'
             };
             table.players[seat] = newBot;
-            console.log(`[BotManager] Bot ${botName} added to table ${tableId}`);
+            logger.info(`Bot ${botName} added to table ${tableId}`, 'I018');
             broadcastState(tableId);
 
             // Si la partida estaba en lobby y ahora hay 2+ jugadores, iniciarla
             if (table.phase === 'lobby' && table.players.filter(p => p).length >= 2) {
-                console.log(`[BotManager] Bot triggered game start on table ${tableId}`);
+                logger.info(`Bot triggered game start on table ${tableId}`, 'I019');
                 startNewHand(tableId);
             }
         }
@@ -772,4 +773,4 @@ setInterval(() => {
     }
 }, 5000); // Revisa cada 5 segundos
 
-server.listen(PORT, () => console.log(`Server Pro running on port ${PORT}`));
+server.listen(PORT, () => logger.info(`Server Pro running on port ${PORT}`, 'I020'));

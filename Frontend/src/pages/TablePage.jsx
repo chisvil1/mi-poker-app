@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PokerTable from '@/components/PokerTable'; 
 import { socket } from '@/socket';
@@ -8,19 +8,23 @@ const TablePage = () => {
   const navigate = useNavigate();
   const [debugStatus, setDebugStatus] = useState('1. Iniciando componente TablePage...');
   const [showTable, setShowTable] = useState(false);
+  const hasJoined = useRef(false); // Ref para controlar el join
 
   const userData = JSON.parse(localStorage.getItem('pokerUser'));
 
   useEffect(() => {
     const handleReauthenticated = () => {
-      setDebugStatus('4. ¡Re-autenticado! Uniéndose a la mesa...');
-      socket.emit('join_game', { 
-        roomId: tableId, 
-        playerName: userData.username,
-        buyInAmount: 1000 // Hardcoded for debugging
-      });
-      // Allow PokerTable to render after attempting to join
-      setShowTable(true);
+      if (!hasJoined.current) {
+        hasJoined.current = true; // Marcar que ya se intentó unir
+        setDebugStatus('4. ¡Re-autenticado! Uniéndose a la mesa...');
+        socket.emit('join_game', { 
+          roomId: tableId, 
+          playerName: userData.username,
+          buyInAmount: 1000 // Hardcoded for debugging
+        });
+        // Allow PokerTable to render after attempting to join
+        setShowTable(true);
+      }
     };
 
     const handleReauthFailed = () => {

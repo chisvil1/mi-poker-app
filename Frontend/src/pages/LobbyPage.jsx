@@ -33,12 +33,19 @@ const LobbyPage = () => {
         });
     };
 
+    const handleReauthFailed = () => {
+        localStorage.removeItem('pokerUser');
+        setUser(null);
+    };
+
     socket.on('logged_in', handleLoggedIn);
     socket.on('balance_update', handleBalanceUpdate);
+    socket.on('reauthentication_failed', handleReauthFailed);
     
     return () => {
         socket.off('logged_in', handleLoggedIn);
         socket.off('balance_update', handleBalanceUpdate);
+        socket.off('reauthentication_failed', handleReauthFailed);
     };
   }, []); 
 
