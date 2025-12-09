@@ -56,7 +56,7 @@ const TablePage = () => {
     return null; 
   }
 
-  const tableConfig = { id: parseInt(tableId), name: `Mesa ${tableId}` };
+  const tableConfig = { id: tableId, name: `Mesa ${tableId}` };
 
   const handleLeaveTable = () => {
     socket.emit('leave_game');

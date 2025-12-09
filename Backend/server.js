@@ -38,6 +38,24 @@ const socketIdToUserId = new Map();
 const pendingPayments = new Map();
 const expulsionTimers = new Map(); 
 
+// --- BOT LOGIC ---
+const getBotAction = (player, table) => {
+    const toCall = table.currentBet - player.currentBet;
+
+    // Si no hay que pagar nada, pasar (check)
+    if (toCall === 0) {
+        return { action: 'call' }; // 'call' en este contexto es un check
+    }
+
+    // Lógica simple: 50% call, 50% fold
+    if (Math.random() < 0.5) {
+        return { action: 'call' };
+    } else {
+        return { action: 'fold' };
+    }
+    // TODO: Añadir lógica de raise en el futuro
+};
+
 // --- UTILIDADES DE PÓKER ---
 const createDeck = () => {
   const suits = ['s', 'h', 'c', 'd']; 
@@ -97,48 +115,56 @@ const broadcastState = (tableId) => {
   const table = tables.get(tableId);
   if (!table) return;
 
-  console.log(`[broadcastState] Broadcasting state for table ${tableId}`);
+  // Emite a toda la sala para actualizaciones generales (logs, pot, etc.)
+  io.to(tableId).emit('game_update', {
+    ...table,
+    players: table.players.map(p => {
+      if (!p) return null;
+      // No enviar la mano de nadie en la emisión general
+      return { ...p, hand: [null, null] }; 
+    })
+  });
 
-  // Enviar estado específico a cada jugador para que vean sus propias cartas
+  // Enviar a cada jugador sus cartas específicas
   table.players.forEach(p => {
-      if (p && p.isHuman) {
-          console.log(`[broadcastState] Processing player ${p.name}`);
-          const playerSpecificPlayers = table.players.map(pp => {
-              if(!pp) return null;
-              const showCards = table.phase === 'showdown' && !pp.hasFolded;
-              
-              const formatCard = (c) => c ? { 
-                  rank: c.slice(0, -1).replace('T', '10'), 
-                  suit: c.slice(-1) 
-              } : null;
-
-              if (pp.socketId === p.socketId) {
-                   console.log(`[broadcastState] Player ${p.name} hand:`, p.hand);
-                   return {
-                       ...pp,
-                       hand: p.hand.map(formatCard)
-                   };
-              }
-              // Ocultar cartas de otros
-              return {
-                 ...pp,
-                 hand: pp.hand.map(c => showCards ? formatCard(c) : null),
-                 showCards
-              };
-          });
+    if (p && p.isHuman && p.socketId) {
+      const playerSpecificState = {
+        ...table,
+        players: table.players.map(otherPlayer => {
+          if (!otherPlayer) return null;
           
-          const communityPublic = table.communityCards.map(c => ({
+          const showCards = table.phase === 'showdown' && !otherPlayer.hasFolded;
+          
+          const formatCard = (c) => c ? { 
+              rank: c.slice(0, -1).replace('T', '10'), 
+              suit: c.slice(-1) 
+          } : null;
+          
+          let handToShow;
+          if (otherPlayer.socketId === p.socketId) {
+            // Es el jugador actual, mostrarle sus cartas
+            handToShow = otherPlayer.hand.map(formatCard);
+          } else if (showCards) {
+            // Es otro jugador durante el showdown, mostrarle sus cartas
+            handToShow = otherPlayer.hand.map(formatCard);
+          } else {
+            // Es otro jugador, no mostrarle las cartas
+            handToShow = otherPlayer.hand.map(() => null);
+          }
+
+          return {
+             ...otherPlayer,
+             hand: handToShow,
+             showCards: showCards,
+          };
+        }),
+        communityCards: table.communityCards.map(c => ({
             rank: c.slice(0, -1).replace('T', '10'), 
             suit: c.slice(-1)
-          }));
-
-          console.log(`[broadcastState] Sending update to ${p.name}, hand length:`, playerSpecificPlayers.find(pl => pl && pl.socketId === p.socketId).hand.length);
-          io.to(p.socketId).emit('game_update', { 
-              ...table, 
-              players: playerSpecificPlayers,
-              communityCards: communityPublic
-          });
-      }
+        }))
+      };
+      io.to(p.socketId).emit('game_update', playerSpecificState);
+    }
   });
 };
 
@@ -210,11 +236,13 @@ const startNewHand = (tableId) => {
     
     broadcastState(tableId);
 
-    // Auto-fold para el primer jugador si está ausente
+    // Trigger bot action if UTG is a bot
     const firstPlayer = table.players[utg];
-    if (firstPlayer && firstPlayer.status === 'away') {
+    if (firstPlayer && !firstPlayer.isHuman) {
+        triggerBotAction(firstPlayer, tableId);
+    } else if (firstPlayer && firstPlayer.status === 'away') {
         console.log(`[Auto-Fold] El primer jugador ${firstPlayer.name} está ausente. Se retira automáticamente.`);
-        setTimeout(() => handlePlayerAction(firstPlayer.socketId, 'fold'), 1000);
+        setTimeout(() => handleAction(tableId, utg, 'fold'), 1000);
     }
 };
 
@@ -222,81 +250,121 @@ const nextPhase = (tableId) => {
     const table = tables.get(tableId);
     if(!table) return;
 
-    table.players.forEach(p => { if(p) { p.hasActed = false; table.pot += p.currentBet; p.currentBet = 0; } });
+    // Acumular apuestas en el bote y resetear apuestas de jugadores
+    let totalPotFromBets = 0;
+    table.players.forEach(p => { 
+        if(p) { 
+            totalPotFromBets += p.currentBet;
+            p.currentBet = 0; 
+            p.hasActed = false; // Resetear el estado de acción para la nueva ronda
+        }
+    });
+    table.pot += totalPotFromBets;
     table.currentBet = 0;
+    table.minRaise = table.bigBlind; // Resetear la subida mínima
+
+    // Determinar si todos menos uno están all-in o se han retirado
+    const activePlayers = table.players.filter(p => p && !p.hasFolded);
+    const playersIn = activePlayers.filter(p => !p.isAllIn);
+    
+    if (playersIn.length <= 1) {
+        // Si solo queda un jugador que puede apostar, avanzamos todas las fases hasta el showdown
+        while(table.phase !== 'river') {
+             if (table.phase === 'preflop') {
+                table.phase = 'flop';
+                table.communityCards.push(table.deck.pop(), table.deck.pop(), table.deck.pop());
+            } else if (table.phase === 'flop') {
+                table.phase = 'turn';
+                table.communityCards.push(table.deck.pop());
+            } else if (table.phase === 'turn') {
+                table.phase = 'river';
+                table.communityCards.push(table.deck.pop());
+            }
+        }
+    }
 
     if (table.phase === 'preflop') {
         table.phase = 'flop';
-        table.communityCards = [table.deck.pop(), table.deck.pop(), table.deck.pop()];
+        table.communityCards.push(table.deck.pop(), table.deck.pop(), table.deck.pop());
     } else if (table.phase === 'flop') {
         table.phase = 'turn';
         table.communityCards.push(table.deck.pop());
     } else if (table.phase === 'turn') {
         table.phase = 'river';
         table.communityCards.push(table.deck.pop());
-    } else if (table.phase === 'river') {
+    } else if (table.phase === 'river' || playersIn.length <= 1) {
         table.phase = 'showdown';
-        const winners = determineWinners(table);
-        const winAmount = Math.floor(table.pot / winners.length);
         
-        winners.forEach(w => {
-            const p = table.players.find(pl => pl && pl.id === w.id);
-            if(p) {
-                p.chips += winAmount;
-                p.isWinner = true;
-                // Actualizar saldo global
-                if(p.isHuman && users.has(p.userId)) {
-                    const user = users.get(p.userId);
-                    user.balance = p.chips; 
-                    io.to(user.socketId).emit('balance_update', user.balance);
-                }
-            }
-        });
-        table.message = `Ganador: ${winners.map(w=>w.name).join(', ')}`;
-        table.pot = 0;
-        broadcastState(tableId);
-        
+        // Retraso para que el showdown sea visible
         setTimeout(() => {
-            console.log(`[nextPhase - setTimeout] Triggering startNewHand for table ${tableId}`);
-            startNewHand(tableId)
-        }, 5000);
+            const winners = determineWinners(table);
+            const winAmount = Math.floor(table.pot / winners.length);
+            
+            winners.forEach(w => {
+                const p = table.players.find(pl => pl && pl.id === w.id);
+                if(p) {
+                    p.chips += winAmount;
+                    p.isWinner = true;
+                    // Actualizar saldo global si es humano
+                    if(p.isHuman && users.has(p.userId)) {
+                        const user = users.get(p.userId);
+                        user.balance += p.chips - (p.buyIn || 0); 
+                        io.to(user.socketId).emit('balance_update', user.balance);
+                    }
+                }
+            });
+            table.message = `Ganador: ${winners.map(w=>w.name).join(', ')}`;
+            broadcastState(tableId); // Mostrar cartas y ganador
+            
+            setTimeout(() => startNewHand(tableId), 5000);
+        }, 1000);
         return;
     }
     
     let next = (table.dealerIndex + 1) % 6;
-    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn || table.players[next].disconnected) {
+    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn) {
         next = (next + 1) % 6;
-        if(next === (table.dealerIndex + 1) % 6) break;
+        if(next === (table.dealerIndex + 1) % 6) break; // Evitar bucle infinito
     }
     table.activePlayerIndex = next;
     broadcastState(tableId);
 
-    // Auto-fold para el siguiente jugador si está ausente
     const nextPlayer = table.players[next];
-    if (nextPlayer && nextPlayer.status === 'away') {
-        console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
-        setTimeout(() => handlePlayerAction(nextPlayer.socketId, 'fold'), 1000);
+    if (nextPlayer) {
+        if (!nextPlayer.isHuman) {
+            triggerBotAction(nextPlayer, tableId);
+        } else if (nextPlayer.status === 'away') {
+            console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
+            setTimeout(() => handleAction(tableId, next, 'fold'), 1000);
+        }
     }
 };
 
-const handlePlayerAction = (socketId, action, amount) => {
-    let tableId, playerIndex, table;
-    for (const [tid, t] of tables.entries()) {
-        const idx = t.players.findIndex(p => p && p.socketId === socketId);
-        if (idx !== -1) {
-            tableId = tid;
-            table = t;
-            playerIndex = idx;
-            break;
-        }
-    }
+const triggerBotAction = (player, tableId) => {
+    if (!player || player.isHuman) return;
 
+    console.log(`[Bot Action] Triggering action for bot: ${player.name}`);
+    const table = tables.get(tableId);
+    if (!table) return;
+
+    // Retraso para simular que el bot "piensa"
+    setTimeout(() => {
+        const botAction = getBotAction(player, table);
+        handleAction(tableId, player.id, botAction.action, botAction.amount);
+    }, 1500);
+};
+
+const handleAction = (tableId, playerIndex, action, amount) => {
+    const table = tables.get(tableId);
     if (!table || table.activePlayerIndex !== playerIndex) {
-        console.log(`[handlePlayerAction] Action rejected for player ${playerIndex}. Active player is ${table.activePlayerIndex}.`);
+        console.log(`[handleAction] Action rejected for player ${playerIndex}. Active player is ${table.activePlayerIndex}.`);
         return;
     }
 
     const player = table.players[playerIndex];
+    if (!player) return;
+    
+    console.log(`[handleAction] Processing action: ${action} from player: ${player.name}`);
     player.hasActed = true;
 
     if (action === 'fold') {
@@ -305,15 +373,10 @@ const handlePlayerAction = (socketId, action, amount) => {
         if (activePlayers.length === 1) {
             const winner = activePlayers[0];
             winner.chips += table.pot;
-            table.players.forEach(p => { if (p) p.currentBet = 0; });
-            table.pot = 0;
-            table.phase = 'showdown'; // Or some other phase to indicate the hand is over
+            table.players.forEach(p => { if (p) { table.pot += p.currentBet; p.currentBet = 0; }});
             table.message = `Ganador: ${winner.name}`;
             broadcastState(tableId);
-            setTimeout(() => {
-                console.log(`[handlePlayerAction - fold - setTimeout] Triggering startNewHand for table ${tableId}`);
-                startNewHand(tableId)
-            }, 5000);
+            setTimeout(() => startNewHand(tableId), 5000);
             return;
         }
     } else if (action === 'call') {
@@ -325,20 +388,34 @@ const handlePlayerAction = (socketId, action, amount) => {
     } else if (action === 'raise') {
         const totalBet = amount;
         const added = totalBet - player.currentBet;
-        if (player.chips >= added) {
+        if (player.chips >= added && totalBet >= table.currentBet + table.minRaise) {
             player.chips -= added;
             player.currentBet = totalBet;
             table.currentBet = totalBet;
-            table.players.forEach(p => { if (p && p.socketId !== socketId) p.hasActed = false; });
+            table.minRaise = totalBet - (table.currentBet - added); // La nueva subida mínima es el tamaño de la última subida
+            table.players.forEach(p => { if (p && p.id !== player.id) p.hasActed = false; });
+        } else {
+             // Si la acción no es válida, simplemente no hacemos nada y dejamos que el jugador actúe de nuevo.
+             // En un futuro, se podría emitir un error al cliente.
+             player.hasActed = false;
+             return;
         }
     }
 
     let next = (playerIndex + 1) % 6;
-    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn || table.players[next].disconnected) {
+    while(!table.players[next] || table.players[next].hasFolded || table.players[next].isAllIn) {
         next = (next + 1) % 6;
-        if(next === playerIndex) break; 
+        if(next === playerIndex) { // Si solo queda un jugador activo
+             // Esto puede ocurrir si todos los demás se han retirado o están all-in
+            const remainingPlayers = table.players.filter(p => p && !p.hasFolded);
+            if (remainingPlayers.length <= 1) {
+                 nextPhase(tableId); // Ir a la siguiente fase para repartir el bote
+                 return;
+            }
+            break;
+        }
     }
-
+    
     const active = table.players.filter(p => p && !p.hasFolded && !p.isAllIn);
     const allHaveActed = active.every(p => p.hasActed);
     const allMatched = active.every(p => p.currentBet === table.currentBet);
@@ -348,13 +425,32 @@ const handlePlayerAction = (socketId, action, amount) => {
     } else {
         table.activePlayerIndex = next;
         broadcastState(tableId);
-
-        // Auto-fold para el siguiente jugador si está ausente
+        
         const nextPlayer = table.players[next];
-        if (nextPlayer && nextPlayer.status === 'away') {
-            console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
-            setTimeout(() => handlePlayerAction(nextPlayer.socketId, 'fold'), 1000);
+        if (nextPlayer) {
+             if (!nextPlayer.isHuman) {
+                triggerBotAction(nextPlayer, tableId);
+             } else if (nextPlayer.status === 'away') {
+                 console.log(`[Auto-Fold] El jugador ${nextPlayer.name} está ausente. Se retira automáticamente.`);
+                 setTimeout(() => handleAction(tableId, next, 'fold'), 1000);
+             }
         }
+    }
+};
+
+const handlePlayerAction = (socketId, action, amount) => {
+    let tableId, playerIndex;
+    for (const [tid, t] of tables.entries()) {
+        const idx = t.players.findIndex(p => p && p.socketId === socketId);
+        if (idx !== -1) {
+            tableId = tid;
+            playerIndex = idx;
+            break;
+        }
+    }
+
+    if (tableId !== undefined && playerIndex !== undefined) {
+        handleAction(tableId, playerIndex, action, amount);
     }
 };
 
@@ -625,5 +721,55 @@ io.on('connection', (socket) => {
     }
   });
 });
+
+// --- BOT MANAGEMENT ---
+const BOT_NAMES = ["Nexus", "Cypher", "Orion", "Echo", "Jolt", "Apex"];
+
+const addBotIfNeeded = (tableId) => {
+    const table = tables.get(tableId);
+    if (!table) return;
+
+    const playerCount = table.players.filter(p => p).length;
+    const botCount = table.players.filter(p => p && !p.isHuman).length;
+
+    // Solo añadir bots si hay al menos un humano y menos de 2 bots.
+    if (playerCount > 0 && playerCount < 6 && botCount < 2) {
+        const seat = table.players.findIndex(p => p === null);
+        if (seat !== -1) {
+            const botName = `${BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]}_${Math.floor(Math.random() * 100)}`;
+            const newBot = {
+                id: seat,
+                userId: `bot_${botName}`,
+                socketId: null, // Los bots no tienen socket
+                name: botName,
+                chips: 1000, 
+                hand: [],
+                isHuman: false,
+                currentBet: 0,
+                hasFolded: false,
+                isAllIn: false,
+                hasActed: false,
+                status: 'playing'
+            };
+            table.players[seat] = newBot;
+            console.log(`[BotManager] Bot ${botName} added to table ${tableId}`);
+            broadcastState(tableId);
+
+            // Si la partida estaba en lobby y ahora hay 2+ jugadores, iniciarla
+            if (table.phase === 'lobby' && table.players.filter(p => p).length >= 2) {
+                console.log(`[BotManager] Bot triggered game start on table ${tableId}`);
+                startNewHand(tableId);
+            }
+        }
+    }
+};
+
+// --- GAME LOOP ---
+setInterval(() => {
+    for (const tableId of tables.keys()) {
+        addBotIfNeeded(tableId);
+        // Aquí se podría añadir más lógica de loop, como el time bank.
+    }
+}, 5000); // Revisa cada 5 segundos
 
 server.listen(PORT, () => console.log(`Server Pro running on port ${PORT}`));
