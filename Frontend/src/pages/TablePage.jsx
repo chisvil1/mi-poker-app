@@ -14,13 +14,10 @@ const TablePage = () => {
     setDebugLog(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
   };
 
-  logToPage('Component RENDER');
-
-  const { tableId } = useParams();
-  const navigate = useNavigate();
   const userData = JSON.parse(localStorage.getItem('pokerUser'));
 
   useEffect(() => {
+    logToPage('Component RENDER'); // Log moved here
     logToPage('useEffect RUN');
     
     const handleReauthenticated = () => {
