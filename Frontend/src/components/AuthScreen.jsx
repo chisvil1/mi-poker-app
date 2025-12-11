@@ -46,11 +46,13 @@ const AuthScreen = ({ onAuthSuccess }) => {
             if (response.ok) {
                 onAuthSuccess(data.token, data.token ? data.data : data); // Pass token and user data
             } else {
-                setError(data.error || data.msg || 'Error de autenticación.');
+                const serverError = JSON.stringify(data);
+                console.error('Server Auth Error:', serverError);
+                setError(`Error del servidor: ${data.error || serverError}`);
             }
         } catch (err) {
-            setError('Error de red o del servidor.');
-            console.error('Auth fetch error:', err);
+            console.error('Network/fetch error:', err);
+            setError(`Error de Conexión: ${err.message}. Asegúrate de que el servidor backend está funcionando.`);
         } finally {
             setLoading(false);
         }
