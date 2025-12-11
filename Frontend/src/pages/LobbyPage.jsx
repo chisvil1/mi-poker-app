@@ -10,18 +10,34 @@ const LobbyPage = () => {
   const [user, setUser] = useState(null);
   const [showCashier, setShowCashier] = useState(false);
 
+  // Function to handle successful authentication from AuthScreen
+  const handleAuthSuccess = (token, userData) => {
+    localStorage.setItem('pokerToken', token);
+    localStorage.setItem('pokerUser', JSON.stringify(userData)); // Store basic user data
+    setUser(userData);
+    socket.emit('authenticate', { token }); // Authenticate socket connection
+  };
+
   useEffect(() => {
-    const storedUser = localStorage.getItem('pokerUser');
-    if (storedUser) {
-      const user_data = JSON.parse(storedUser);
-      setUser(user_data);
-      // Re-autenticar la sesión del socket al cargar la página
-      socket.emit('reauthenticate', { userId: user_data.userId });
+    const storedToken = localStorage.getItem('pokerToken');
+    if (storedToken) {
+      socket.emit('authenticate', { token: storedToken }); // Attempt to authenticate socket with stored token
+    } else {
+      // If no token, ensure user state is cleared
+      setUser(null);
+      localStorage.removeItem('pokerUser');
     }
 
-    const handleLoggedIn = (userData) => {
-        setUser(userData);
-        localStorage.setItem('pokerUser', JSON.stringify(userData)); 
+    const handleAuthenticated = (userData) => {
+      setUser(userData);
+      // Update localStorage with full user data if not already present or if new data
+      localStorage.setItem('pokerUser', JSON.stringify(userData));
+    };
+
+    const handleUnauthorized = () => {
+      localStorage.removeItem('pokerToken');
+      localStorage.removeItem('pokerUser');
+      setUser(null);
     };
 
     const handleBalanceUpdate = (newBalance) => {
@@ -33,31 +49,62 @@ const LobbyPage = () => {
         });
     };
 
-    const handleReauthFailed = () => {
-        localStorage.removeItem('pokerUser');
-        setUser(null);
-    };
-
-    socket.on('logged_in', handleLoggedIn);
+    socket.on('authenticated', handleAuthenticated);
+    socket.on('unauthorized', handleUnauthorized);
     socket.on('balance_update', handleBalanceUpdate);
-    socket.on('reauthentication_failed', handleReauthFailed);
     
     return () => {
-        socket.off('logged_in', handleLoggedIn);
+        socket.off('authenticated', handleAuthenticated);
+        socket.off('unauthorized', handleUnauthorized);
         socket.off('balance_update', handleBalanceUpdate);
-        socket.off('reauthentication_failed', handleReauthFailed);
     };
   }, []); 
 
-  const handleLogin = (username) => {
-      socket.emit('login', { username }); 
+  // handleLogin is removed, as AuthScreen now handles its own login/register via API calls
+
+  const handleDeposit = async (amount, currency) => {
+      if(!user || !user.id) { // Ensure user is logged in and has an ID
+        alert('Debes iniciar sesión para realizar depósitos.');
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/create_payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('pokerToken')}` // Send auth token
+          },
+          body: JSON.stringify({ amount: parseFloat(amount), currency, userId: user.id })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          if (data.pay_url) {
+            window.open(data.pay_url, '_blank'); // Open payment URL
+          } else {
+            alert('Pago creado, pero no se recibió URL de pago. Consulta la consola.');
+            console.warn('NowPayments response:', data);
+          }
+        } else {
+          alert(`Error al crear el pago: ${data.error || 'Error desconocido'}`);
+        }
+      } catch (error) {
+        alert('Error de red al intentar crear el pago.');
+        console.error('Deposit fetch error:', error);
+      }
   };
 
-  const handleDeposit = (amount, currency) => {
-      if(user){
-        socket.emit('deposit', { amount, userId: user.userId });
-        alert(`Generando dirección de depósito para ${amount} USD en ${currency} (Conectando a pasarela...)`);
-      }
+  const handleLogout = () => {
+    localStorage.removeItem('pokerToken');
+    localStorage.removeItem('pokerUser');
+    setUser(null);
+    // Disconnect socket to clean up server-side resources and then reconnect for the next user
+    if (socket.connected) {
+      socket.disconnect();
+    }
+    socket.connect();
   };
 
   const handleJoinTable = (tableConfig) => {
@@ -65,7 +112,7 @@ const LobbyPage = () => {
       window.open(`/table/${tableConfig.id}`, '_blank', windowFeatures);
   };
 
-  if (!user) return <AuthScreen onLogin={handleLogin} />;
+  if (!user) return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-gray-200 font-sans flex flex-col overflow-hidden">
@@ -84,6 +131,9 @@ const LobbyPage = () => {
                 <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-full shadow-lg border border-white/10 flex items-center justify-center text-white font-bold">
                     {user.username.substring(0, 2).toUpperCase()}
                 </div>
+                <button onClick={handleLogout} className="text-gray-400 hover:text-white text-sm font-bold uppercase">
+                    CERRAR SESIÓN
+                </button>
             </div>
         </header>
 

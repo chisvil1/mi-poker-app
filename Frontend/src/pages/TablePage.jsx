@@ -1,104 +1,113 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PokerTable from '@/components/PokerTable'; 
 import { socket } from '@/socket';
+import { playSound } from '@/utils/playSound';
 
 const TablePage = () => {
-  const [debugStatus, setDebugStatus] = useState('1. Iniciando componente TablePage...');
-  const [showTable, setShowTable] = useState(false);
-  const [debugLog, setDebugLog] = useState([]); // Estado para los logs en pantalla
-  const hasJoined = useRef(false);
-
-  // Función para añadir logs al estado y verlos en pantalla
-  const logToPage = (message) => {
-    setDebugLog(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
-  };
-
-  const userData = JSON.parse(localStorage.getItem('pokerUser'));
+  const { tableId } = useParams();
+  const navigate = useNavigate();
+  
+  const [user, setUser] = useState(null);
+  const [gameState, setGameState] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [status, setStatus] = useState('Autenticando...');
 
   useEffect(() => {
-    logToPage('Component RENDER'); // Log moved here
-    logToPage('useEffect RUN');
-    
-    const handleReauthenticated = () => {
-      logToPage(`handleReauthenticated TRIGGERED. hasJoined.current: ${hasJoined.current}`);
-      if (!hasJoined.current) {
-        hasJoined.current = true;
-        logToPage('EMITTING join_game');
-        setDebugStatus('4. ¡Re-autenticado! Uniéndose a la mesa...');
-        socket.emit('join_game', { 
-          roomId: tableId, 
-          playerName: userData.username,
-          buyInAmount: 1000
-        });
-        setShowTable(true);
-      } else {
-        logToPage('NOT EMITTING join_game because hasJoined.current is true');
-      }
-    };
-
-    const handleReauthFailed = () => {
-        logToPage('handleReauthFailed TRIGGERED');
-        setDebugStatus('ERROR: Falló la re-autenticación.');
-        alert("Falló la re-autenticación. Por favor, inicia sesión de nuevo.");
-        window.close();
-    };
-
-    if (userData && userData.userId) {
-        logToPage('useEffect: User data found. Emitting reauthenticate.');
-        setDebugStatus('2. Datos de usuario encontrados. Emitiendo reauthenticate...');
-        socket.emit('reauthenticate', { userId: userData.userId });
-        socket.once('reauthenticated', handleReauthenticated);
-        socket.once('reauthentication_failed', handleReauthFailed);
-    } else {
-        logToPage('useEffect: No user data found.');
-        setDebugStatus('ERROR: No se encontraron datos de usuario en localStorage.');
+    const token = localStorage.getItem('pokerToken');
+    if (!token) {
+      setStatus('Error: No estás autenticado.');
+      alert('No estás autenticado. Por favor, inicia sesión desde el lobby.');
+      window.close();
+      return;
     }
+
+    const handleAuthenticated = (authenticatedUser) => {
+      setStatus('Autenticado. Uniéndote a la mesa...');
+      setUser(authenticatedUser);
+      socket.emit('join_game', { 
+        roomId: tableId, 
+        buyInAmount: 1000 
+      });
+    };
+
+    const handleUnauthorized = () => {
+      setStatus('Error: Autenticación fallida.');
+      alert('Tu sesión ha expirado o no es válida.');
+      window.close();
+    };
+
+    const handleErrorJoining = (error) => {
+      setStatus(`Error: ${error.message}`);
+      alert(`No se pudo unir a la mesa: ${error.message}`);
+      window.close();
+    };
+    
+    const handleGameUpdate = (newGameState) => {
+        if (!gameState) setStatus('Conectado a la mesa.'); // First game state received
+        setGameState(newGameState);
+        if (newGameState.pot > (gameState?.pot || 0)) playSound('bet'); 
+    };
+
+    const handleChatMessage = (msg) => {
+        setChatMessages(prev => [...prev, msg]);
+        playSound('message');
+    };
+
+    socket.on('authenticated', handleAuthenticated);
+    socket.on('unauthorized', handleUnauthorized);
+    socket.on('error_joining', handleErrorJoining);
+    socket.on('game_update', handleGameUpdate);
+    socket.on('chat_message', handleChatMessage);
+
+    if (socket.disconnected) socket.connect();
+    socket.emit('authenticate', { token });
 
     return () => {
-        logToPage('useEffect CLEANUP');
-        socket.off('reauthenticated', handleReauthenticated);
-        socket.off('reauthentication_failed', handleReauthFailed);
+      socket.off('authenticated', handleAuthenticated);
+      socket.off('unauthorized', handleUnauthorized);
+      socket.off('error_joining', handleErrorJoining);
+      socket.off('game_update', handleGameUpdate);
+      socket.off('chat_message', handleChatMessage);
     };
+  }, [tableId]);
 
-  }, [tableId, userData?.userId, userData?.username]);
-
-  if (!userData || !tableId) {
-    if (window.opener) { 
-        alert("Información de usuario o mesa perdida. Por favor, vuelve al lobby principal.");
-        window.close();
-    } else { 
-        navigate('/');
-    }
-    return null; 
-  }
-
-  const tableConfig = { id: tableId, name: `Mesa ${tableId}` };
-
+  // Action Handlers to be passed to PokerTable
   const handleLeaveTable = () => {
     socket.emit('leave_game');
     window.close();
   };
 
-  return (
-    <>
-      <div style={{ position: 'absolute', top: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', zIndex: 9999, fontFamily: 'monospace', fontSize: '10px' }}>
-        <p>Estado de Depuración:</p>
-        <p>{debugStatus}</p>
-        <hr style={{margin: '10px 0'}} />
-        <p>Log en Pantalla:</p>
-        <div style={{height: '200px', overflowY: 'scroll'}}>
-          {debugLog.map((log, i) => <p key={i}>{log}</p>)}
-        </div>
+  const handleAction = (action, amount = 0) => {
+    socket.emit('action', { action, amount });
+  };
+
+  const handleSendMessage = (text, roomId) => {
+    if(user) socket.emit('chat_message', { player: user.username, text, roomId });
+  };
+
+  const handleRestart = (roomId) => {
+    socket.emit('restart', { roomId });
+  };
+  
+  if (!gameState || !user) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+          <p>{status}</p>
       </div>
-      {showTable ? (
-        <PokerTable tableConfig={tableConfig} user={userData} onLeave={handleLeaveTable} />
-      ) : (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center">
-            <p>{debugStatus}</p>
-        </div>
-      )}
-    </>
+    );
+  }
+  
+  return (
+    <PokerTable 
+      gameState={gameState} 
+      user={user} 
+      chatMessages={chatMessages}
+      onLeave={handleLeaveTable} 
+      onAction={handleAction}
+      onSendMessage={handleSendMessage}
+      onRestart={handleRestart}
+    />
   );
 };
 

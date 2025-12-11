@@ -8,9 +8,25 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-  - type: web
+      # CRÍTICO: Debes añadir las variables MONGO_URI, JWT_SECRET, etc. en el panel de control de Render.
+      # Ejemplo para una base de datos de Render:
+      # - key: MONGO_URI
+      #   fromDatabase:
+      #     name: mi-poker-db
+      #     property: connectionString
+      # Ejemplo para un secreto:
+      # - key: JWT_SECRET
+      #   generateValue: true
+
+  - type: static
     name: mi-poker-app-frontend
-    env: static
     rootDir: Frontend
     buildCommand: "npm install && npm run build"
     staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /api/:path*
+        destination: http://mi-poker-app-backend:4000/api/:path*
+      - type: rewrite # Asegura que el enrutamiento del lado del cliente funcione
+        source: /*
+        destination: /index.html

@@ -3,10 +3,21 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
-const crypto = require('crypto'); 
+const crypto = require('crypto');
+const dotenv = require('dotenv');
+const connectDB = require('./config/db');
+
+// Load env vars
+dotenv.config();
+
+// Connect to database
+connectDB();
+
 // Recuerda instalar: npm install pokersolver
 const logger = require('./utils/logger');
 const Hand = require('pokersolver').Hand; 
+const jwt = require('jsonwebtoken');
+const User = require('./models/User');
 
 const app = express();
 app.use(cors());
@@ -14,6 +25,9 @@ app.use(cors());
 // porque necesitamos el cuerpo del mensaje en formato RAW para verificar la firma.
 app.use('/api/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json()); // El resto de la API usa JSON 
+
+// API Routes
+app.use('/api/auth', require('./routes/authRoutes'));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -488,7 +502,7 @@ app.post('/api/create_payment', async (req, res) => {
 });
 
 // 2. Webhook (El Aviso de la Blockchain con Verificación de Seguridad)
-app.post('/api/webhook', (req, res) => {
+app.post('/api/webhook', async (req, res) => {
     const signature = req.headers['x-nowpayments-sig'];
     const bodyString = req.body.toString('utf8');
 
@@ -496,7 +510,6 @@ app.post('/api/webhook', (req, res) => {
     const generatedSignature = crypto.createHmac('sha512', IPN_SECRET).update(bodyString).digest('hex');
 
     if (signature !== generatedSignature) {
-        // Si no coinciden, es un intento de fraude
         logger.error('ALERTA DE SEGURIDAD: Firma IPN inválida!', 'E005');
         return res.status(403).send('Firma IPN inválida');
     }
@@ -510,14 +523,26 @@ app.post('/api/webhook', (req, res) => {
             const order = pendingPayments.get(payment_id);
 
             if (order && order.status === 'waiting') {
-                // 3. Acreditar Saldo
-                const user = users.get(order.userId);
-                if (user) {
-                    user.balance += order.amount; // Usamos amount de la orden original ($USD)
-                    io.to(user.socketId).emit('payment_success', { newBalance: user.balance, added: order.amount });
-                    io.to(user.socketId).emit('balance_update', user.balance);
+                 // 3. Acreditar Saldo DIRECTAMENTE en la DB
+                const updatedUser = await User.findByIdAndUpdate(
+                    order.userId,
+                    { $inc: { balance: order.amount } },
+                    { new: true }
+                );
+
+                if (updatedUser) {
+                    logger.info(`User ${updatedUser.username} balance updated to ${updatedUser.balance} after payment ${payment_id}`, 'I-PAY-01');
+                    
+                    // Si el usuario está conectado, actualizar su estado en memoria y notificarle
+                    const inMemoryUser = users.get(order.userId);
+                    if (inMemoryUser) {
+                        inMemoryUser.balance = updatedUser.balance;
+                        io.to(inMemoryUser.socketId).emit('payment_success', { newBalance: updatedUser.balance, added: order.amount });
+                        io.to(inMemoryUser.socketId).emit('balance_update', updatedUser.balance);
+                    }
                 }
-                pendingPayments.delete(payment_id);
+                
+                pendingPayments.set(payment_id, { ...order, status: 'processed' });
             }
         }
     } catch (e) {
@@ -539,119 +564,136 @@ app.get('*', (req, res) => {
 io.on('connection', (socket) => {
   logger.info(`Conectado: ${socket.id}`, 'I010');
 
-  socket.on('login', ({ username }) => {
-      let userId = `user_${socket.id}`;
-      // Evitar sobreescribir si ya existe, aunque el flujo normal no debería permitirlo
-      if (!users.has(userId)) {
-          users.set(userId, { id: userId, username, balance: 1000, socketId: socket.id });
-          socketIdToUserId.set(socket.id, userId);
-          logger.info(`User ${username} created with balance: 1000`, 'I-LGN-01');
+  socket.on('authenticate', async ({ token }) => {
+    if (!token) {
+      return socket.emit('unauthorized', { message: 'No token provided' });
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id);
+
+      if (!user) {
+        return socket.emit('unauthorized', { message: 'Invalid token' });
       }
-      socket.emit('logged_in', { userId, username, balance: users.get(userId).balance });
-  });
-
-  socket.on('reauthenticate', (authPayload) => {
-    logger.info(`Attempting to reauthenticate userId: ${authPayload.userId}`, 'I-RAU-01');
-    if (authPayload && authPayload.userId && users.has(authPayload.userId)) {
-        const user = users.get(authPayload.userId);
-        logger.info(`User ${user.username} found for re-authentication with balance: ${user.balance}`, 'I-RAU-02');
-
-        // Limpiar cualquier socketId antiguo asociado a este userId
-        for (const [sid, uid] of socketIdToUserId.entries()) {
-            if (uid === user.id) {
-                socketIdToUserId.delete(sid);
-                break;
-            }
+      
+      // Clean up old socket associations for this user
+      for (const [sid, uid] of socketIdToUserId.entries()) {
+        if (uid === user.id.toString()) {
+            socketIdToUserId.delete(sid);
+            break;
         }
+      }
 
-        // Actualizar con el nuevo socketId
-        user.socketId = socket.id;
-        socketIdToUserId.set(socket.id, user.id);
-        
-        // Confirmar al cliente
-        socket.emit('reauthenticated');
-    } else {
-        socket.emit('reauthentication_failed');
+      // Associate socket with user
+      socketIdToUserId.set(socket.id, user.id.toString());
+      users.set(user.id.toString(), {
+          // We are creating an in-memory representation of the user for game logic
+          id: user.id.toString(),
+          username: user.username,
+          balance: user.balance,
+          socketId: socket.id,
+      });
+
+      socket.emit('authenticated', {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        balance: user.balance,
+      });
+      
+      logger.info(`User ${user.username} authenticated with socket ${socket.id}`, 'I-AUTH-01');
+
+    } catch (error) {
+      logger.error(`Authentication error: ${error.message}`, 'E-AUTH-01');
+      socket.emit('unauthorized', { message: 'Invalid token' });
     }
   });
 
-  socket.on('join_game', ({ roomId, playerName, buyInAmount = 1000 }) => { // Default buy-in for now
-      const userId = socketIdToUserId.get(socket.id);
-      const user = users.get(userId);
 
-      if (!user) {
-          socket.emit('error_joining', { message: 'Usuario no encontrado.' });
-          return;
-      }
-      
-      logger.info(`User ${user.username} attempting to join table ${roomId}. Balance: ${user.balance}, Buy-in: ${buyInAmount}`, 'I-JGM-01');
 
-      if (user.balance < buyInAmount) {
-          socket.emit('error_joining', { message: 'Saldo insuficiente para el buy-in.' });
-          return;
-      }
 
-      let table = tables.get(roomId);
-      if (!table) table = createNewTable(roomId, { name: "Mesa Pública" });
 
-      const existingPlayer = table.players.find(p => p && p.name === playerName);
 
-      if (existingPlayer) {
-          if (existingPlayer.status === 'away') {
-              // Reconnection logic remains the same
-              logger.info(`Jugador ${playerName} se está reconectando a la mesa ${roomId}`, 'I012');
-              existingPlayer.status = 'playing';
-              existingPlayer.socketId = socket.id;
-              
-              const oldSocketId = Object.keys(socketIdToUserId).find(key => socketIdToUserId[key] === existingPlayer.userId);
-              if(oldSocketId) socketIdToUserId.delete(oldSocketId);
-              socketIdToUserId.set(socket.id, existingPlayer.userId);
 
-              const expulsionTimer = expulsionTimers.get(existingPlayer.userId);
-              if (expulsionTimer) {
-                  clearTimeout(expulsionTimer);
-                  expulsionTimers.delete(existingPlayer.userId);
-                  logger.info(`Temporizador de expulsión cancelado para ${playerName}`, 'I013');
-              }
-              
-              broadcastState(roomId);
-              return;
-          } else {
-              socket.emit('error_joining', { message: 'El nombre de usuario ya está en uso en esta mesa.' });
-              return;
-          }
-      }
-      
-      let seat = table.players.findIndex(p => p === null);
-      if (seat === -1) {
-          socket.emit('error_joining', { message: 'La mesa está llena.' });
-          return;
-      }
-      
-      // Deduct buy-in from lobby balance and update chips
-      user.balance -= buyInAmount;
-      logger.info(`User ${user.username} balance updated to: ${user.balance} after buy-in.`, 'I-JGM-02');
-      io.to(socket.id).emit('balance_update', user.balance);
+  socket.on('join_game', async ({ roomId, buyInAmount = 1000 }) => { // playerName is removed for security
+    const userId = socketIdToUserId.get(socket.id);
+    if (!userId) {
+      return socket.emit('error_joining', { message: 'Usuario no autenticado.' });
+    }
+    
+    // Use the in-memory user object for username, but perform balance transaction atomically on the DB
+    const inMemoryUser = users.get(userId);
+    if (!inMemoryUser) {
+      return socket.emit('error_joining', { message: 'Usuario no encontrado en memoria.' });
+    }
+    
+    logger.info(`User ${inMemoryUser.username} attempting to join table ${roomId} with buy-in: ${buyInAmount}`, 'I-JGM-01');
+    
+    try {
+        // ATOMIC OPERATION: Find user and decrement balance only if sufficient
+        const updatedUser = await User.findOneAndUpdate(
+            { _id: userId, balance: { $gte: buyInAmount } }, // Query to find the user with enough balance
+            { $inc: { balance: -buyInAmount } },             // Update (decrement balance)
+            { new: true }                                    // Options (return the updated document)
+        );
 
-      const newPlayer = {
-          id: seat,
-          userId,
-          socketId: socket.id,
-          name: playerName,
-          chips: buyInAmount, // Use the buy-in amount
-          hand: [],
-          isHuman: true,
-          currentBet: 0,
-          hasFolded: false,
-          isAllIn: false,
-          hasActed: false,
-          status: 'playing' // 'playing', 'away', 'sitting_out'
-      };
-      
-      table.players[seat] = newPlayer;
-      socket.join(roomId);
+        if (!updatedUser) {
+             // If updatedUser is null, it means the query failed (likely because balance was < buyInAmount)
+             logger.warn(`Join failed for ${inMemoryUser.username}, insufficient balance.`, 'W-JGM-01');
+             return socket.emit('error_joining', { message: 'Saldo insuficiente para el buy-in.' });
+        }
+        
+        // If we reach here, the buy-in was successful. Update in-memory state.
+        inMemoryUser.balance = updatedUser.balance;
+        logger.info(`User ${inMemoryUser.username} balance updated to: ${inMemoryUser.balance} after buy-in.`, 'I-JGM-02');
+        io.to(socket.id).emit('balance_update', inMemoryUser.balance);
 
-      broadcastState(roomId);
+        // --- The rest of the join table logic can now proceed safely ---
+        let table = tables.get(roomId);
+        if (!table) table = createNewTable(roomId, { name: "Mesa Pública" });
+
+        const existingPlayer = table.players.find(p => p && p.userId === userId);
+        if (existingPlayer) {
+            // This logic handles reconnection for a player already at the table
+            logger.info(`Jugador ${inMemoryUser.username} se está reconectando a la mesa ${roomId}`, 'I012');
+            existingPlayer.status = 'playing';
+            existingPlayer.socketId = socket.id;
+            broadcastState(roomId);
+            return;
+        }
+        
+        let seat = table.players.findIndex(p => p === null);
+        if (seat === -1) {
+            // This is unlikely but possible in a race. We should refund the user.
+            await User.findByIdAndUpdate(userId, { $inc: { balance: buyInAmount } });
+            inMemoryUser.balance += buyInAmount; // Also update in-memory
+            io.to(socket.id).emit('balance_update', inMemoryUser.balance);
+            return socket.emit('error_joining', { message: 'La mesa está llena.' });
+        }
+
+        const newPlayer = {
+            id: seat,
+            userId,
+            socketId: socket.id,
+            name: inMemoryUser.username,
+            chips: buyInAmount,
+            hand: [],
+            isHuman: true,
+            currentBet: 0,
+            hasFolded: false,
+            isAllIn: false,
+            hasActed: false,
+            status: 'playing'
+        };
+        
+        table.players[seat] = newPlayer;
+        socket.join(roomId);
+        broadcastState(roomId);
+
+    } catch (error) {
+        logger.error(`Error joining game for user ${userId}: ${error.message}`, 'E-JGM-01');
+        socket.emit('error_joining', { message: 'Ocurrió un error al unirse a la mesa.' });
+    }
   });
 
   socket.on('action', ({ action, amount }) => {
@@ -666,7 +708,7 @@ io.on('connection', (socket) => {
       startNewHand(roomId);
   });
 
-  socket.on('leave_game', () => {
+  socket.on('leave_game', async () => {
     const userId = socketIdToUserId.get(socket.id);
     if (!userId) return;
 
@@ -674,18 +716,36 @@ io.on('connection', (socket) => {
         const playerIndex = table.players.findIndex(p => p && p.userId === userId);
         if (playerIndex !== -1) {
             const player = table.players[playerIndex];
-            const user = users.get(userId);
-            
-            if (user && player) {
-                logger.info(`Jugador ${player.name} saliendo de la mesa ${tableId} con ${player.chips} fichas.`, 'I014');
-                user.balance += player.chips;
-                logger.info(`User ${user.username} balance updated to: ${user.balance} after leaving table.`, 'I-LGM-01');
-                io.to(socket.id).emit('balance_update', user.balance);
-            }
+            if (!player) continue;
 
-            table.players[playerIndex] = null;
-            broadcastState(tableId);
-            break;
+            const chipsToReturn = player.chips || 0;
+
+            try {
+                // Persist balance change to DB
+                const updatedUser = await User.findByIdAndUpdate(
+                    userId,
+                    { $inc: { balance: chipsToReturn } },
+                    { new: true }
+                );
+
+                if (updatedUser) {
+                    // Update in-memory user object
+                    const inMemoryUser = users.get(userId);
+                    if (inMemoryUser) {
+                        inMemoryUser.balance = updatedUser.balance;
+                    }
+                    logger.info(`Jugador ${player.name} saliendo de la mesa ${tableId} con ${chipsToReturn} fichas. Balance actualizado en DB.`, 'I014');
+                    io.to(socket.id).emit('balance_update', updatedUser.balance);
+                }
+
+                table.players[playerIndex] = null;
+                broadcastState(tableId);
+                
+            } catch (error) {
+                 logger.error(`Error leaving game for user ${userId}: ${error.message}`, 'E-LGM-01');
+                 socket.emit('error_leaving', { message: 'Ocurrió un error al salir de la mesa.' });
+            }
+            break; 
         }
     }
   });
