@@ -5,7 +5,7 @@ import DealerButton from './DealerButton';
 
 const PlayerSeat = ({ player, position, isMe, isActive }) => {
   if (!player) return null;
-  const { isWinner, hasFolded, isAllIn, showCards, hand, status } = player;
+  const { isWinner, hasFolded, isAllIn, showCards, hand, status, chips } = player;
 
   const renderHand = () => {
       if (!hand || hand.length === 0) return null;
@@ -20,31 +20,38 @@ const PlayerSeat = ({ player, position, isMe, isActive }) => {
   };
 
   return (
-    <div className="absolute flex flex-col items-center justify-center transition-all duration-500"
+    <div
+      className="absolute flex flex-col items-center justify-center transition-all duration-500"
       style={{ top: position.top, left: position.left, transform: 'translate(-50%, -50%)', opacity: (hasFolded || status === 'away') ? 0.6 : 1, zIndex: isActive ? 40 : 20 }}
     >
-      {/* Cartas */}
-      <div className={`absolute z-20 flex -space-x-2 transition-all duration-500 ${position.align === 'bottom' ? '-top-14' : '-bottom-12'}`}>
-        {renderHand()}
-      </div>
+      {/* Player Box */}
+      <div className={`relative flex flex-col items-center p-2 rounded-lg bg-gray-900/70 border ${isActive ? 'border-yellow-500 shadow-lg' : 'border-gray-700'} transition-all duration-300`}>
+        {/* Avatar */}
+        <div className="relative w-20 h-20 rounded-full bg-gray-800 ring-2 ring-gray-600">
+          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${player.name}`} alt={player.name} className={`w-full h-full rounded-full p-1 ${hasFolded || status === 'away' ? 'grayscale' : ''}`} />
+          {player.isDealer && <DealerButton />}
+        </div>
 
-      {/* Avatar */}
-      <div className={`relative w-16 h-16 rounded-full transition-all duration-300 z-10 bg-gray-800 ${isActive ? 'ring-4 ring-yellow-400 shadow-[0_0_25px_gold] scale-105' : 'ring-2 ring-black/50 shadow-lg'}`}>
-        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${player.name}`} alt={player.name} className={`w-full h-full rounded-full p-1 ${hasFolded || status === 'away' ? 'grayscale' : ''}`} />
-        {isAllIn && !hasFolded && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded-full font-bold uppercase shadow-md border border-white/20">All-in</div>}
-        {player.isDealer && <DealerButton />}
-        {status === 'away' && <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white font-bold text-xs rounded-full">AUSENTE</div>}
-      </div>
+        {/* Info */}
+        <div className="mt-2 text-center">
+          <div className="text-white text-sm font-bold truncate max-w-[100px]">{player.name}</div>
+          <div className="text-green-400 text-xs font-bold font-mono">${chips}</div>
+        </div>
 
-      {/* Info */}
-      <div className={`mt-[-10px] z-30 bg-gray-900/90 backdrop-blur border border-gray-600 rounded-lg px-3 py-1 text-center shadow-xl min-w-[90px] ${isActive ? 'border-yellow-500' : ''}`}>
-        <div className="text-gray-300 text-[10px] font-bold truncate max-w-[80px] mx-auto">{player.name}</div>
-        <div className="text-green-400 text-xs font-bold font-mono">${player.chips}</div>
+        {/* Status Indicators */}
+        {isAllIn && !hasFolded && <div className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded-full font-bold uppercase shadow-md border border-white/20">All-in</div>}
+        {hasFolded && <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white font-bold text-lg rounded-lg">FOLD</div>}
+        {status === 'away' && <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white font-bold text-xs rounded-lg">AUSENTE</div>}
+
+        {/* Cartas */}
+        <div className={`absolute z-20 flex -space-x-2 transition-all duration-500 ${position.align === 'bottom' ? '-top-10' : 'top-10'}`}>
+          {renderHand()}
+        </div>
       </div>
 
       {/* Apuesta */}
       {player.currentBet > 0 && (
-        <div className={`absolute z-0 transition-all duration-500 animate-in zoom-in ${position.align === 'bottom' ? '-top-28' : 'top-24'}`}>
+        <div className={`absolute z-0 transition-all duration-500 animate-in zoom-in ${position.align === 'bottom' ? '-bottom-10' : 'top-10'}`}>
           <ChipStack amount={player.currentBet} />
         </div>
       )}
